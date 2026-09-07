@@ -23,7 +23,8 @@ object PayParser {
         Pair("mandiri|livin", "Mandiri"),
         Pair("seabank|sea", "SeaBank"),
         Pair("jenius", "Jenius"),
-        Pair("linkaja", "LinkAja")
+        Pair("linkaja", "LinkAja"),
+        Pair("gopaymerchant|gopay|gojek", "GoPay Merchant")
     )
 
     fun parseAmount(text: String?): Long? {

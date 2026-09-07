@@ -4,10 +4,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.IBinder
+import android.service.notification.NotificationListenerService
 import android.util.Log
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -29,14 +31,19 @@ class SenderService : Service() {
         private const val KEY_TOKEN = "token"
 
         @Volatile private var running = false
+        @Volatile private var worker: Thread? = null
+        @Volatile private var wake: Object? = null
 
+        /** bangunkan worker segera: interrupt sleep 60s */
         fun kick(ctx: Context) {
+            wake?.let { w ->
+                synchronized(w) { w.notifyAll() }
+            }
             try {
                 val i = Intent(ctx, SenderService::class.java)
                 if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i)
                 else ctx.startService(i)
             } catch (_: Exception) {
-                // app di background ketat: loop 60s akan mengambilnya
             }
         }
 
@@ -60,13 +67,16 @@ class SenderService : Service() {
         startAsForeground()
         if (!running) {
             running = true
-            Thread {
+            val w = Object()
+            wake = w
+            worker = Thread {
                 try {
                     loop()
                 } finally {
                     running = false
                 }
-            }.start()
+            }
+            worker?.start()
         }
         // START_STICKY: service dibunuh system -> direstart otomatis dengan intent null
         return START_STICKY
@@ -95,27 +105,45 @@ class SenderService : Service() {
     }
 
     private fun loop() {
+        var watchdogTick = 0
         while (true) {
             try {
                 val u = url(this)
                 val tk = token(this)
                 if (u.isBlank()) {
                     // belum dikonfigurasi: tidur panjang, jangan buang baterai
-                    Thread.sleep(300_000)
+                    sleepOrWake(300_000)
                     continue
                 }
-                val rows = db.pending(20)
-                for (r in rows) {
-                    // sendOne sudah menandai failed/tries internal — jangan dobel di sini
-                    if (sendOne(u, tk, r)) db.markSent(r.id)
+                // watchdog: listener unbind diam-diam (quirk OEM) -> minta rebind tiap ~5 menit
+                if (++watchdogTick % 5 == 0 && !ListenerService.alive) {
+                    try {
+                        NotificationListenerService.requestRebind(
+                            ComponentName(this, ListenerService::class.java)
+                        )
+                    } catch (_: Exception) {}
                 }
+                db.cleanup()
+                val rows = db.pending(20)
+                var anyFail = false
+                for (r in rows) {
+                    if (sendOne(u, tk, r)) db.markSent(r.id) else anyFail = true
+                }
+                sleepOrWake(if (anyFail) 15_000 else 60_000)
             } catch (e: Exception) {
                 Log.e(TAG, "loop", e)
+                sleepOrWake(30_000)
             }
+        }
+    }
+
+    private fun sleepOrWake(ms: Long) {
+        val w = wake ?: return
+        synchronized(w) {
             try {
-                Thread.sleep(60_000)
+                w.wait(ms)
             } catch (_: InterruptedException) {
-                return
+                // dibangunkan kick(): langsung lanjut loop
             }
         }
     }
@@ -144,10 +172,12 @@ class SenderService : Service() {
             conn.inputStream.use { it.readBytes() } // drain
             conn.disconnect()
         } catch (e: Exception) {
-            db.markFailed(r.id, e.message)
+            // kegagalan JARINGAN (offline/DNS/timeout): JANGAN hitung tries.
+            // row tetap pending selamanya sampai inet balik (batas: umur 48 jam di query pending)
             return false
         }
         if (code in 200..299) return true
+        // server MENOLAK (4xx/5xx): hitung tries, cap 8 -> failed
         db.markFailed(r.id, "HTTP $code")
         return false
     }

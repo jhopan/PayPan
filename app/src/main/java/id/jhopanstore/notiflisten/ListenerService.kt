@@ -68,11 +68,12 @@ class ListenerService : NotificationListenerService() {
 
             val amount = PayParser.parseAmount(body)
             val source = PayParser.parseSource(pkg, title, body)
-            // simpan SEMUA notif dari app lain (raw tetap utuh), filter hanya saat parse gagal total
+            // id = key notif (stabil saat notif di-update) + hash konten.
+            // konten sama -> id sama -> INSERT OR IGNORE dedup, postTime tidak dipakai
             val hash = Integer.toHexString(
                 (title.orEmpty() + "|" + body).hashCode()
             )
-            val id = "$pkg|${sbn.postTime}|$hash"
+            val id = (sbn.key ?: "$pkg|${sbn.id}") + "|" + hash
 
             db.insert(id, pkg, title, body, amount, source, sbn.postTime)
             SenderService.kick(this)

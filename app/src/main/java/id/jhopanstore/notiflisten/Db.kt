@@ -50,9 +50,11 @@ class Db(context: Context) : SQLiteOpenHelper(context, "outbox.db", null, 1) {
 
     fun pending(limit: Int): List<Row> {
         val out = ArrayList<Row>()
+        // cap umur 48 jam: lebih tua dari itu dianggap batal (server expiry juga lewat)
+        val cutoff = System.currentTimeMillis() - 48L * 3600_000
         writableDatabase.rawQuery(
-            "SELECT id,pkg,title,text,amount,source,created_at,tries FROM notif WHERE status=0 AND tries<8 ORDER BY created_at LIMIT ?",
-            arrayOf(limit.toString())
+            "SELECT id,pkg,title,text,amount,source,created_at,tries FROM notif WHERE status=0 AND tries<8 AND created_at>? ORDER BY created_at LIMIT ?",
+            arrayOf(cutoff.toString(), limit.toString())
         ).use { c ->
             while (c.moveToNext()) {
                 out.add(
@@ -91,6 +93,14 @@ class Db(context: Context) : SQLiteOpenHelper(context, "outbox.db", null, 1) {
             }
         }
         return Triple(p, s, f)
+    }
+
+    fun cleanup() {
+        val cutoff = System.currentTimeMillis() - 7L * 24 * 3600_000
+        writableDatabase.execSQL(
+            "DELETE FROM notif WHERE status IN (1,2) AND created_at<?",
+            arrayOf(cutoff)
+        )
     }
 
     fun recent(limit: Int): List<Row> {
