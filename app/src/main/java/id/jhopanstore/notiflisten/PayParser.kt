@@ -11,8 +11,9 @@ object PayParser {
 
     private val AMOUNT: Pattern = Pattern.compile("(?:Rp|IDR)\\.?\\s*([\\d.,]+)")
 
-    // (regex title|text case-insensitive, source label)
+    // (regex title|text case-insensitive, source label) — rule spesifik SEBELUM rule umum
     private val SOURCE_RULES = listOf(
+        Pair("gopaymerchant", "GoPay Merchant"),
         Pair("dana", "DANA"),
         Pair("gopay|gojek", "GoPay"),
         Pair("ovo", "OVO"),
@@ -23,8 +24,7 @@ object PayParser {
         Pair("mandiri|livin", "Mandiri"),
         Pair("seabank|sea", "SeaBank"),
         Pair("jenius", "Jenius"),
-        Pair("linkaja", "LinkAja"),
-        Pair("gopaymerchant|gopay|gojek", "GoPay Merchant")
+        Pair("linkaja", "LinkAja")
     )
 
     fun parseAmount(text: String?): Long? {
@@ -80,7 +80,8 @@ object PayParser {
     fun parseSource(pkg: String, title: String?, text: String?): String? {
         val hay = ((title ?: "") + " " + (text ?: "")).lowercase()
         for ((pat, label) in SOURCE_RULES) {
-            if (hay.contains(pat)) return label
+            // pola bisa multi-alternasi "bri|membri|brimo" — cek per alternatif
+            if (pat.split("|").any { hay.contains(it) }) return label
         }
         return null
     }
