@@ -30,7 +30,7 @@ func (s *srv) handleLogin(w http.ResponseWriter, r *http.Request) {
 	msg := ""
 	if r.Method == http.MethodPost {
 		r.ParseForm()
-		if r.FormValue("pass") == s.adminPass() {
+		if r.FormValue("user") == s.adminUser() && r.FormValue("pass") == s.adminPass() {
 			tok := sessions.newSession()
 			http.SetCookie(w, &http.Cookie{
 				Name: "paypan_session", Value: tok, Path: "/",
@@ -44,13 +44,25 @@ func (s *srv) handleLogin(w http.ResponseWriter, r *http.Request) {
 	tmpl, _ := template.New("l").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — Paypan</title>
 <style>body{font-family:system-ui;background:#f2f4f8;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
-.c{background:#fff;padding:32px;border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.09);width:320px}
-h1{font-size:20px;margin:0 0 16px}input{width:100%;box-sizing:border-box;padding:10px;margin:6px 0 12px;border:1px solid #ccc;border-radius:8px}
-button{width:100%;padding:10px;background:#1a7f37;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer}
-.e{color:#b00;font-size:14px}</style></head><body><div class="c">
-<h1>Paypan Admin</h1>
-<form method="post"><input type="password" name="pass" placeholder="Password admin" autofocus>
-<button>Login</button></form>{{if .}}<p class="e">{{.}}</p>{{end}}</div></body></html>`)
+.c{background:#fff;padding:36px;border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.09);width:340px}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.logo .dot{width:38px;height:38px;border-radius:10px;background:#101828;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px}
+.logo b{font-size:19px} .logo small{display:block;color:#667085;font-size:12px}
+label{font-size:13px;color:#344054;font-weight:600;display:block;margin:10px 0 4px}
+input{width:100%;box-sizing:border-box;padding:10px;margin:0 0 4px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px}
+input:focus{outline:2px solid #1a7f37;border-color:#1a7f37}
+button{width:100%;padding:11px;background:#1a7f37;color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer;margin-top:14px;font-size:15px}
+button:hover{background:#166f30}
+.e{color:#b42318;font-size:14px;background:#fee4e2;padding:8px 12px;border-radius:8px;margin-bottom:10px}
+.hint{color:#667085;font-size:12px;margin-top:14px;text-align:center}</style></head><body><div class="c">
+<div class="logo"><div class="dot">P</div><div><b>Paypan Admin</b><small>Payment Gateway Console</small></div></div>
+{{if .}}<p class="e">{{.}}</p>{{end}}
+<form method="post">
+<label>Username</label><input type="text" name="user" placeholder="username" autofocus autocomplete="username">
+<label>Password</label><input type="password" name="pass" placeholder="password" autocomplete="current-password">
+<button>Login</button>
+</form>
+<div class="hint">Akses terbatas — dilarang dibagikan</div></div></body></html>`)
 	tmpl.Execute(w, msg)
 }
 
@@ -67,39 +79,65 @@ func (s *srv) handleLogout(w http.ResponseWriter, r *http.Request) {
 var adminTmpl = template.Must(template.New("a").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — Paypan</title>
 <style>
+*{box-sizing:border-box}
 body{font-family:system-ui;background:#f2f4f8;margin:0}
-header{background:#101828;color:#fff;padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
-header a{color:#94b8ff;text-decoration:none;font-size:14px}
-.wrap{max-width:960px;margin:24px auto;padding:0 16px}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:230px;background:#101828;color:#cbd5e1;padding:18px 14px;display:flex;flex-direction:column;position:fixed;top:0;bottom:0;left:0}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 20px;border-bottom:1px solid #1e293b;margin-bottom:14px}
+.brand .dot{width:36px;height:36px;border-radius:10px;background:#1a7f37;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex-shrink:0}
+.brand b{color:#fff;font-size:16px;display:block;line-height:1.1}
+.brand small{color:#64748b;font-size:11px}
+.menu a{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;color:#cbd5e1;text-decoration:none;font-size:14px;font-weight:500;margin-bottom:4px}
+.menu a:hover{background:#1e293b;color:#fff}
+.menu a.on{background:#1a7f37;color:#fff;font-weight:600}
+.menu .ico{width:20px;text-align:center;flex-shrink:0}
+.sidebar .foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid #1e293b;font-size:12px;color:#64748b}
+.main{margin-left:230px;flex:1;min-width:0}
+header{background:#fff;border-bottom:1px solid #e4e7ec;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0;color:#101828}
+header .right{display:flex;align-items:center;gap:14px}
+header .who{font-size:13px;color:#667085}
+header a.out{color:#b42318;text-decoration:none;font-size:13px;font-weight:600;padding:7px 14px;border:1px solid #fda29b;border-radius:8px}
+header a.out:hover{background:#fee4e2}
+.content{max-width:980px;margin:24px auto;padding:0 24px}
 .card{background:#fff;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 1px 6px rgba(0,0,0,.06)}
-h2{margin:0 0 12px;font-size:17px}
+h2{margin:0 0 12px;font-size:16px;color:#101828}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{padding:8px 10px;border-bottom:1px solid #eee;text-align:left}
 th{color:#667085;font-weight:600;background:#f9fafb}
 code{background:#f2f4f8;padding:2px 6px;border-radius:6px;font-size:13px}
-input,select{padding:8px;border:1px solid #ccc;border-radius:8px;margin:4px 0}
-button{padding:8px 14px;background:#1a7f37;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:600}
-button.del{background:#b42318}
+input,select,textarea{padding:8px;border:1px solid #d0d5dd;border-radius:8px;margin:4px 0;font-size:14px}
+input:focus,textarea:focus,select:focus{outline:2px solid #1a7f37;border-color:#1a7f37}
+button{padding:8px 14px;background:#1a7f37;color:#fff;border:0;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px}
+button:hover{background:#166f30}
+button.del{background:#b42318}button.del:hover{background:#912018}
+button.sec{background:#fff;color:#344054;border:1px solid #d0d5dd}button.sec:hover{background:#f9fafb}
 .badge{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .paid{background:#d4edda;color:#186a3b}.pending{background:#fff3cd;color:#8a6d00}
 .expired{background:#f8d7da;color:#8a1c1c}
 .money{font-variant-numeric:tabular-nums;text-align:right}
 .flash{background:#d4edda;color:#186a3b;padding:10px 14px;border-radius:8px;margin-bottom:14px}
 small{color:#667085}
-.nav{display:flex;gap:8px;margin-bottom:16px}
-.nav a{padding:8px 16px;border-radius:8px;background:#fff;color:#101828;text-decoration:none;font-weight:600;font-size:14px;border:1px solid #e4e7ec}
-.nav a.on{background:#101828;color:#fff}
+form.inline{display:inline}
+@media(max-width:800px){.sidebar{display:none}.main{margin-left:0}}
 </style></head><body>
-<header><b>Paypan</b> <small style="color:#94a3b8">payment gateway</small><a href="/admin/logout">Logout</a></header>
-<div class="wrap">
-<div class="nav">
-<a href="/admin" class="{{if eq .Tab "dash"}}on{{end}}">Dashboard</a>
-<a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}">Aplikasi & Token</a>
-<a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}">Konfigurasi</a>
+<div class="layout">
+<div class="sidebar">
+<div class="brand"><div class="dot">P</div><div><b>Paypan</b><small>payment gateway</small></div></div>
+<div class="menu">
+<a href="/admin" class="{{if eq .Tab "dash"}}on{{end}}"><span class="ico">▤</span> Dashboard</a>
+<a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}"><span class="ico">⧉</span> Aplikasi &amp; Token</a>
+<a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}"><span class="ico">⚙</span> Konfigurasi</a>
 </div>
+<div class="foot">v1.0 · jhopanstore</div>
+</div>
+<div class="main">
+<header><h1>{{.Title}}</h1>
+<div class="right"><span class="who">👤 {{.User}}</span><a class="out" href="/admin/logout">Logout</a></div></header>
+<div class="content">
 {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
 {{.Body}}
-</div></body></html>`))
+</div></div></div></body></html>`))
 type pageData struct {
 	Title string
 	Tab   string
@@ -110,6 +148,7 @@ type pageData struct {
 func (s *srv) renderPage(w http.ResponseWriter, tab, title, flash string, body func() template.HTML) {
 	adminTmpl.Execute(w, map[string]any{
 		"Tab": tab, "Title": title, "Flash": flash, "Body": body(),
+		"User": s.adminUser(),
 	})
 }
 
@@ -231,11 +270,19 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		case "pass":
 			np := r.FormValue("newpass")
-			if len(np) >= 6 {
-				s.setAdminPass(np)
-				flash = "Password admin diganti"
+			nu := strings.TrimSpace(r.FormValue("newuser"))
+			if nu != "" {
+				s.setAdminUser(nu)
+			}
+			if np != "" {
+				if len(np) >= 6 {
+					s.setAdminPass(np)
+					flash = "Login admin diperbarui"
+				} else {
+					flash = "Password minimal 6 karakter (username tetap diganti)"
+				}
 			} else {
-				flash = "Password minimal 6 karakter"
+				flash = "Username diganti"
 			}
 		case "tg":
 			s.db.Exec("INSERT INTO settings(key,value) VALUES('tg_token',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", r.FormValue("tgtoken"))
@@ -260,10 +307,13 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 <input name="tgtoken" placeholder="Bot token" value="` + tgToken + `" style="width:100%">
 <input name="tgchat" placeholder="Chat ID tujuan" value="` + tgChat + `" style="width:100%">
 <button>Simpan Telegram</button></form></div>`)
-		b.WriteString(`<div class="card"><h2>Password admin</h2>
+		b.WriteString(`<div class="card"><h2>Login admin</h2>
 <form method="post"><input type="hidden" name="act" value="pass">
-<input type="password" name="newpass" placeholder="Password baru (min 6)" style="width:100%">
-<button>Ganti Password</button></form></div>`)
+<label style="font-size:13px;color:#344054">Username</label>
+<input name="newuser" placeholder="username baru (opsional)" value="` + s.adminUser() + `" style="width:100%">
+<label style="font-size:13px;color:#344054">Password baru</label>
+<input type="password" name="newpass" placeholder="kosongkan jika tidak diubah" style="width:100%">
+<button>Simpan</button></form></div>`)
 		return template.HTML(b.String())
 	})
 }

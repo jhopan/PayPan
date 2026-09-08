@@ -115,6 +115,20 @@ func (ss *sessionStore) drop(tok string) {
 }
 
 // adminPass baca password admin dari settings (default dibuat saat init)
+func (s *srv) adminUser() string {
+	var p string
+	s.db.QueryRow("SELECT value FROM settings WHERE key='admin_user'").Scan(&p)
+	if p == "" {
+		p = "admin"
+		s.db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES('admin_user','admin')")
+	}
+	return p
+}
+
+func (s *srv) setAdminUser(u string) {
+	s.db.Exec("INSERT INTO settings(key,value) VALUES('admin_user',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", u)
+}
+
 func (s *srv) adminPass() string {
 	var p string
 	s.db.QueryRow("SELECT value FROM settings WHERE key='admin_pass'").Scan(&p)
