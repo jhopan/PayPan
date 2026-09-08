@@ -67,7 +67,7 @@ async function buat(){
   const btn = document.getElementById('btn');
   btn.disabled = true; btn.textContent = 'Memproses...';
   try{
-    const res = await fetch(API + '/api/kasir/order', {
+    const res = await fetch(API + '/admin/kasir/order', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       credentials:'same-origin',
@@ -86,7 +86,7 @@ function showPay(o){
   document.getElementById('formView').style.display = 'none';
   document.getElementById('payView').style.display = 'block';
   document.getElementById('amt').textContent = rp(o.total);
-  document.getElementById('qr').src = API + '/qr/' + o.id + '.png';
+  document.getElementById('qr').src = API + '/admin/qr/' + o.id + '.png';
   document.getElementById('oid').textContent = 'Order ' + o.id;
   document.getElementById('qr').style.display = 'block';
   poll(o.id);

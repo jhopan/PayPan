@@ -65,9 +65,9 @@ func main() {
 			s.handleCheckout(w, r)
 		}
 	})
-	// kasir: di dalam admin (bukan publik)
-	mux.HandleFunc("/kasir", s.handleKasir)
-	mux.HandleFunc("/api/kasir/order", func(w http.ResponseWriter, r *http.Request) {
+	// kasir: bagian dari /admin/*
+	mux.HandleFunc("/admin/kasir", s.handleKasir)
+	mux.HandleFunc("/admin/kasir/order", func(w http.ResponseWriter, r *http.Request) {
 		// endpoint order khusus kasir: auth = session admin, bukan token
 		c, err := r.Cookie("paypan_session")
 		if err != nil || !sessions.valid(c.Value) {
@@ -78,14 +78,14 @@ func main() {
 		// (session), buat order langsung tanpa token check.
 		s.handleOrderCreateSession(w, r)
 	})
-	mux.HandleFunc("/qr/", func(w http.ResponseWriter, r *http.Request) {
-		// /qr/{id}.png -> butuh session admin juga
+	mux.HandleFunc("/admin/qr/", func(w http.ResponseWriter, r *http.Request) {
+		// /admin/qr/{id}.png -> butuh session admin juga
 		c, err := r.Cookie("paypan_session")
 		if err != nil || !sessions.valid(c.Value) {
 			http.NotFound(w, r)
 			return
 		}
-		p := strings.TrimPrefix(r.URL.Path, "/qr/")
+		p := strings.TrimPrefix(r.URL.Path, "/admin/qr/")
 		p = strings.TrimSuffix(p, ".png")
 		r.URL.Path = "/pay/" + p + "/qr.png"
 		s.handleQR(w, r)
