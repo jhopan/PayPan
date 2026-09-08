@@ -376,9 +376,9 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
 		// QRIS: gambar + payload dalam SATU kartu, simpan bareng = selalu sinkron
 		b.WriteString(`<div class="card"><h2>QRIS Statis</h2>
-<small>Upload gambar QR statis lo — payload teks otomatis diambil dari gambar. Keduanya selalu sinkron.</small>
 <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:12px">`)
-		b.WriteString(`<div style="flex:0 0 200px;text-align:center">`)
+		b.WriteString(`<div style="flex:0 0 200px;text-align:center">
+<label style="font-size:13px;color:#344054;font-weight:600">Upload Gambar</label>`)
 		if curImg != "" {
 			b.WriteString(`<img src="` + curImg + `" alt="QRIS" style="width:190px;border:1px solid #eee;border-radius:10px">`)
 		} else {
@@ -401,10 +401,9 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		b.WriteString(`</div>`)
 		b.WriteString(`<div style="flex:1;min-width:260px">
 <form method="post"><input type="hidden" name="act" value="qris">
-<label style="font-size:13px;color:#344054;font-weight:600">Payload (hasil scan — otomatis diisi saat upload gambar)</label>
+<label style="font-size:13px;color:#344054;font-weight:600">Payload</label>
 <textarea id="qrispayload" name="qris" rows="5" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:8px" placeholder="000201010211...">` + cur + `</textarea>
-<button>Simpan Payload</button>
-<small style="display:block;margin-top:6px">Dipakai untuk generate QR dinamis per order (tag 54 + total).</small></form></div>
+<button>Simpan Payload</button></form></div>
 </div>
 <script>
 function upl(){var f=document.getElementById('qrfile').files[0];if(!f){alert('pilih file');return}
