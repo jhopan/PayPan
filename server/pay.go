@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +51,17 @@ func buildDynamicQR(base string, total int64) (string, error) {
 	return body + crc16(body), nil
 }
 
-// ---------- kode unik 001-999 ----------
+// ---------- kode unik 001-999 per level harga ----------
+
+// Kode unik = 3 digit terakhir yang menjadikan total unik.
+// Aturan (per desain user):
+//   price 1000 -> 1001, 1002, ... (level 1000)
+//   price 2000 -> 2001, 2002, ... (level 2000 — urutan sendiri)
+//   price 1500 -> 1501, 1502, ...
+// Level = price. Kode dipilih per-price: kode yang belum dipakai order aktif
+// dengan price yang sama, diurut dari kecil.
+// Anti-bentrok antar level: total (price+code) tidak boleh sama dengan total
+// order aktif lain (contoh bentrok: 1000+999=1999 vs 1100+899=1999).
 
 // kode harus unik di antara SEMUA order pending, bukan hanya harga sama.
 type codePool struct {
@@ -66,42 +75,62 @@ func newCodePool() *codePool {
 	return &codePool{used: make(map[int]bool)}
 }
 
-// next ambil kode bebas; randomOrder=true mengacak urutan awal.
-func (p *codePool) next(db *sql.DB) (int, error) {
+// next: ambil kode bebas utk price tertentu.
+func (p *codePool) next(db *sql.DB, price int64) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// reload used dari DB setiap kali (sumber kebenaran = DB)
-	// skip kode yang: masih pending, ATAU baru expired/refunded < 24 jam
-	// (payment telat bisa datang setelah order expired — jangan pakai nominal yang sama lagi)
-	rows, err := db.Query(`SELECT code FROM orders WHERE status='pending'
+	// 1. kode yang sudah dipakai order AKTIF dengan price sama
+	rows, err := db.Query(`SELECT code FROM orders WHERE
+		price=? AND (
+		status='pending'
+		OR status='paid'
 		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400)`)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price)
 	if err != nil {
 		return 0, err
 	}
-	p.used = make(map[int]bool)
+	used := make(map[int]bool)
 	for rows.Next() {
 		var c int
 		if err := rows.Scan(&c); err != nil {
 			rows.Close()
 			return 0, err
 		}
-		p.used[c] = true
+		used[c] = true
 	}
 	rows.Close()
-
-	free := make([]int, 0, 999)
-	for c := 1; c <= 999; c++ {
-		if !p.used[c] {
-			free = append(free, c)
+	// 2. total yang sudah dipakai order AKTIF level lain (anti-bentrok total)
+	usedTotal := make(map[int64]bool)
+	rows2, err := db.Query(`SELECT total FROM orders WHERE
+		price != ? AND (
+		status='pending'
+		OR status='paid'
+		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price)
+	if err != nil {
+		return 0, err
+	}
+	for rows2.Next() {
+		var t int64
+		if err := rows2.Scan(&t); err != nil {
+			rows2.Close()
+			return 0, err
 		}
+		usedTotal[t] = true
 	}
-	if len(free) == 0 {
-		return 0, fmt.Errorf("pool kode habis (999 order pending)")
+	rows2.Close()
+
+	for c := 1; c <= 999; c++ {
+		if used[c] {
+			continue // kode sudah dipakai di level ini
+		}
+		total := price + int64(c)
+		if usedTotal[total] {
+			continue // total bentrok dengan level lain yang aktif
+		}
+		return c, nil
 	}
-	// berurutan dari kecil: 001, 002, ... — mudah dibaca, bukan acak
-	sort.Ints(free)
-	return free[0], nil
+	return 0, fmt.Errorf("pool kode habis utk price %d (999 order aktif dengan harga sama)", price)
 }
 
 // ---------- handlers ----------
@@ -267,7 +296,7 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := newCodePool().next(s.db)
+	code, err := newCodePool().next(s.db, q.Price)
 	if err != nil {
 		s.writeJSON(w, 503, map[string]string{"error": err.Error()})
 		return
