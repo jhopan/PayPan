@@ -2,10 +2,13 @@ package main
 
 import (
 	"embed"
+	"encoding/base64"
 	"html/template"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/skip2/go-qrcode"
 )
 
 //go:embed static/*
@@ -281,25 +284,38 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			if strings.Contains(q, "010211") && strings.Contains(q, "5802ID") && strings.Contains(q, "6304") {
 				s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_base',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", q)
 				os.WriteFile("qris_base.txt", []byte(q), 0600) // fallback lokal
-				s.audit(actor, "qris.update", "payload "+itoa(len(q))+" char")
-				flash = "QRIS statis tersimpan"
+				// sinkron: regenerate gambar QR dari payload
+				if png, err := qrcode.Encode(q, qrcode.Medium, 512); err == nil {
+					img := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+					s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_image',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", img)
+				}
+				s.audit(actor, "qris.update", "payload "+itoa(len(q))+" char (gambar ikut digenerate)")
+				flash = "QRIS tersimpan: payload + gambar sinkron"
 			} else {
 				flash = "Payload tidak dikenali (butuh 010211, 5802ID, 6304)"
 			}
 		case "qrisimg":
-			// upload gambar QRIS: base64 data URL dari <input type=file> dibaca JS
+			// upload gambar QRIS: decode QR dari gambar -> payload teks auto-terisi.
+			// gambar + payload disimpan bareng = selalu sinkron.
 			img := strings.TrimSpace(r.FormValue("img"))
-			if strings.HasPrefix(img, "data:image/png;base64,") || strings.HasPrefix(img, "data:image/jpeg;base64,") {
-				if len(img) > 700_000 {
-					flash = "Gambar terlalu besar (max ~500KB)"
-				} else {
-					s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_image',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", img)
-					s.audit(actor, "qris.image", "ganti gambar QRIS")
-					flash = "Gambar QRIS tersimpan"
-				}
-			} else {
+			if !strings.HasPrefix(img, "data:image/png;base64,") && !strings.HasPrefix(img, "data:image/jpeg;base64,") {
 				flash = "Format harus PNG/JPG"
+				break
 			}
+			if len(img) > 700_000 {
+				flash = "Gambar terlalu besar (max ~500KB)"
+				break
+			}
+			payload, err := decodeQRFromDataURL(img)
+			if err != nil || !strings.Contains(payload, "010211") || !strings.Contains(payload, "5802ID") || !strings.Contains(payload, "6304") {
+				flash = "QR pada gambar tidak terbaca / bukan QRIS statis. Paste payload manual di kolom sebelah, lalu Simpan Payload."
+				break
+			}
+			s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_image',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", img)
+			s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_base',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", payload)
+			os.WriteFile("qris_base.txt", []byte(payload), 0600)
+			s.audit(actor, "qris.image", "upload gambar + payload "+itoa(len(payload))+" char (sinkron)")
+			flash = "QRIS tersimpan: gambar + payload sinkron"
 		case "qrisimg_del":
 			s.db.Exec("DELETE FROM settings WHERE key='qris_image'")
 			flash = "Gambar QRIS dihapus"
@@ -358,29 +374,43 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 
 	s.renderPage(w, "config", "Konfigurasi", flash, func() template.HTML {
 		var b strings.Builder
-		b.WriteString(`<div class="card"><h2>QRIS statis — gambar (tampil di checkout)</h2>`)
+		// QRIS: gambar + payload dalam SATU kartu, simpan bareng = selalu sinkron
+		b.WriteString(`<div class="card"><h2>QRIS Statis</h2>
+<small>Upload gambar QR statis lo — payload teks otomatis diambil dari gambar. Keduanya selalu sinkron.</small>
+<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:12px">`)
+		b.WriteString(`<div style="flex:0 0 200px;text-align:center">`)
 		if curImg != "" {
-			b.WriteString(`<div style="margin:8px 0"><img src="` + curImg + `" alt="QRIS" style="width:180px;border:1px solid #eee;border-radius:10px"></div>`)
+			b.WriteString(`<img src="` + curImg + `" alt="QRIS" style="width:190px;border:1px solid #eee;border-radius:10px">`)
+		} else {
+			b.WriteString(`<div style="width:190px;height:190px;border:2px dashed #d0d5dd;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#98a2b3;font-size:13px;margin:0 auto">Belum ada gambar</div>`)
 		}
 		b.WriteString(`<form method="post"><input type="hidden" name="act" value="qrisimg">
-<input type="file" id="qrfile" accept="image/png,image/jpeg" style="margin:6px 0">
-<input type="hidden" name="img" id="imgdata">
-<div><button type="button" onclick="upl()">Upload Gambar</button>
-` )
+<input type="file" id="qrfile" accept="image/png,image/jpeg" style="display:none" onchange="if(this.files[0])upl()">
+<div style="margin-top:8px"><button type="button" class="sec" onclick="document.getElementById('qrfile').click()">Pilih Gambar</button> `)
 		if curImg != "" {
-			b.WriteString(`<form method="post" class="inline"><input type="hidden" name="act" value="qrisimg_del"><button class="del">Hapus Gambar</button></form>`)
+			b.WriteString(`<button type="button" class="del" onclick="document.getElementById('delimg').click()">Hapus</button>`)
 		}
-		b.WriteString(`</div></form>
-<small>Alternatif/dampingi QR dinamis: gambar QR statis asli lo. PNG/JPG max ~500KB.</small>
+		b.WriteString(`</div><input type="hidden" name="img" id="imgdata"></form>`)
+		if curImg != "" {
+			b.WriteString(`<form method="post" id="delimg"></form>`)
+		}
+		// tombol hapus: form terpisah aktif via JS biar gak nested form
+		if curImg != "" {
+			b.WriteString(`<script>document.addEventListener('DOMContentLoaded',function(){var d=document.getElementById('delimg');if(d){var f=document.createElement('form');f.method='post';f.style.display='none';f.innerHTML='<input type=hidden name=act value=qrisimg_del>';document.body.appendChild(f);document.getElementById('delimg').type='button';document.getElementById('delimg').onclick=function(){f.submit()}}})</script>`)
+		}
+		b.WriteString(`</div>`)
+		b.WriteString(`<div style="flex:1;min-width:260px">
+<form method="post"><input type="hidden" name="act" value="qris">
+<label style="font-size:13px;color:#344054;font-weight:600">Payload (hasil scan — otomatis diisi saat upload gambar)</label>
+<textarea id="qrispayload" name="qris" rows="5" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:8px" placeholder="000201010211...">` + cur + `</textarea>
+<button>Simpan Payload</button>
+<small style="display:block;margin-top:6px">Dipakai untuk generate QR dinamis per order (tag 54 + total).</small></form></div>
+</div>
 <script>
 function upl(){var f=document.getElementById('qrfile').files[0];if(!f){alert('pilih file');return}
 var r=new FileReader();r.onload=function(){document.getElementById('imgdata').value=r.result;document.getElementById('imgdata').form.submit()};r.readAsDataURL(f)}
 </script></div>`)
-		b.WriteString(`<div class="card"><h2>QRIS statis — payload teks (buat QR dinamis per order)</h2>
-<form method="post"><input type="hidden" name="act" value="qris">
-<textarea name="qris" rows="4" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:8px" placeholder="000201010211...">` + cur + `</textarea>
-<button>Simpan QRIS</button> <small>Scan QR statis lo dengan scanner, paste raw text di sini. Wajib untuk QR dinamis per order.</small></form></div>`)
-		b.WriteString(`<div class="card"><h2>Webhook — panggil saat order LUNAS</h2>`)
+		b.WriteString(`<div class="card"><h2>Webhook</h2>`)
 		hooks := s.listWebhooks()
 		if len(hooks) > 0 {
 			b.WriteString(`<table><tr><th>URL</th><th>Status</th><th>Aksi</th></tr>`)
