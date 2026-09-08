@@ -91,6 +91,44 @@ func (s *srv) recentUnmatched(n int) []unmatchLite {
 	return out
 }
 
+type paidTx struct {
+	ID     string
+	Source string
+	Total  int64
+	PaidAt int64
+}
+
+// recentPaidFull: transaksi lunas terbaru dgn sumber pembayaran
+func (s *srv) recentPaidFull(n int) []paidTx {
+	rows, err := s.db.Query(`SELECT o.id, COALESCE(p.source,''), o.total, o.paid_at
+		FROM orders o LEFT JOIN payments p ON p.amount = o.total
+		WHERE o.status='paid' ORDER BY o.paid_at DESC LIMIT ?`, n)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []paidTx
+	for rows.Next() {
+		var t paidTx
+		if rows.Scan(&t.ID, &t.Source, &t.Total, &t.PaidAt) == nil {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// deleteTx: hapus satu order + payment terkait (dipanggil dari dashboard).
+func (s *srv) deleteTx(id string) bool {
+	res, err := s.db.Exec("DELETE FROM orders WHERE id=?", id)
+	if err != nil {
+		return false
+	}
+	n, _ := res.RowsAffected()
+	s.db.Exec("DELETE FROM payments WHERE id LIKE ?", id+"|%")
+	s.db.Exec("DELETE FROM webhook_log WHERE order_id=?", id)
+	return n > 0
+}
+
 // rp: format rupiah ringkas: 17500 -> "17.500"
 func rp(n int64) string {
 	s := strconv.FormatInt(n, 10)

@@ -186,6 +186,16 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSession(w, r) {
 		return
 	}
+	flash := ""
+	if r.Method == http.MethodPost && r.FormValue("act") == "del_tx" {
+		id := r.FormValue("id")
+		if s.deleteTx(id) {
+			s.audit(s.adminUser(), "tx.delete", id)
+			flash = "Transaksi " + id + " dihapus"
+		} else {
+			flash = "Gagal hapus (tidak ditemukan)"
+		}
+	}
 	var stats struct{ Paid, Pending, Expired, Pay, Unmatch int }
 	s.db.QueryRow("SELECT SUM(status='paid'),SUM(status='pending'),SUM(status='expired') FROM orders").Scan(&stats.Paid, &stats.Pending, &stats.Expired)
 	s.db.QueryRow("SELECT COUNT(*) FROM payments").Scan(&stats.Pay)
@@ -195,7 +205,10 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	pays := s.recentPayments(10)
 	unm := s.recentUnmatched(8)
 
-	s.renderPage(w, "dash", "Dashboard", r.URL.Query().Get("m"), func() template.HTML {
+	// transaksi lunas lengkap utk dashboard (10 terbaru)
+	txDash := s.recentPaidFull(10)
+
+	s.renderPage(w, "dash", "Dashboard", flash, func() template.HTML {
 		var b strings.Builder
 		// stat tiles: kartu kecil berjajar, bukan tabel
 		b.WriteString(`<div class="stats">
@@ -205,15 +218,25 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 <div class="stat"><div class="n">` + itoa(stats.Pay) + `</div><div class="l">Notif diterima</div></div>
 <div class="stat"><div class="n">` + itoa(stats.Unmatch) + `</div><div class="l">Unmatched</div></div>
 </div>`)
+		// transaksi lunas: lengkap dengan detail + hapus
+		b.WriteString(`<div class="card"><h2>Transaksi Lunas</h2><table>
+<tr><th>Waktu</th><th>Sumber</th><th>ID</th><th class="money">Total</th><th>Aksi</th></tr>`)
+		if len(txDash) == 0 {
+			b.WriteString(`<tr><td colspan="5" class="empty">Belum ada transaksi lunas</td></tr>`)
+		}
+		for _, t := range txDash {
+			b.WriteString(`<tr><td><small>` + timeFmt(t.PaidAt) + `</small></td><td>` + esc(t.Source) + `</td><td><code>` + esc(t.ID) + `</code></td><td class="money"><b>` + rp(t.Total) + `</b></td><td style="white-space:nowrap"><a class="pg" href="/admin/tx/` + esc(t.ID) + `">detail</a> <form method="post" class="inline" onsubmit="return confirm('Hapus transaksi ` + esc(t.ID) + `?')"><input type="hidden" name="act" value="del_tx"><input type="hidden" name="id" value="` + esc(t.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
+		}
+		b.WriteString(`</table><small>Untuk rekap harian/bulanan lengkap: menu <a class="pg" href="/admin/laporan">Laporan</a>.</small></div>`)
 		// order terakhir: rapi + rupiah + waktu
-		b.WriteString(`<div class="card"><h2>Order terakhir</h2><table>
+		b.WriteString(`<div class="card"><h2>Semua order terakhir</h2><table>
 <tr><th>Waktu</th><th>ID</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th></th></tr>`)
 		if len(orders) == 0 {
 			b.WriteString(`<tr><td colspan="6" class="empty">Belum ada order</td></tr>`)
 		}
 		for _, o := range orders {
 			t := o.CreatedAt
-			b.WriteString(`<tr><td><small>` + timeFmt(t) + `</small></td><td><code>` + esc(o.ID) + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + rp(o.Price) + `</td><td class="money"><b>` + rp(o.Total) + `</b></td><td><a class="pg" href="/admin/tx/` + o.ID + `">detail →</a></td></tr>`)
+			b.WriteString(`<tr><td><small>` + timeFmt(t) + `</small></td><td><code>` + esc(o.ID) + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + rp(o.Price) + `</td><td class="money"><b>` + rp(o.Total) + `</b></td><td><a class="pg" href="/admin/tx/` + esc(o.ID) + `">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
 		// notif terakhir
