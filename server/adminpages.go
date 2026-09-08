@@ -211,7 +211,7 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, o := range orders {
 			t := o.CreatedAt
-			b.WriteString(`<tr><td><small>` + timeFmt(t) + `</small></td><td><code>` + o.ID + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + rp(o.Price) + `</td><td class="money"><b>` + rp(o.Total) + `</b></td><td><a class="pg" href="/admin/tx/` + o.ID + `">detail →</a></td></tr>`)
+			b.WriteString(`<tr><td><small>` + timeFmt(t) + `</small></td><td><code>` + esc(o.ID) + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + rp(o.Price) + `</td><td class="money"><b>` + rp(o.Total) + `</b></td><td><a class="pg" href="/admin/tx/` + o.ID + `">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
 		// notif terakhir
@@ -225,14 +225,14 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 			if p.Amount.Valid {
 				amt = rp(p.Amount.Int64)
 			}
-			b.WriteString(`<tr><td><small>` + timeFmt(p.ReceivedAt) + `</small></td><td><code>` + p.Pkg + `</code></td><td>` + p.Title + `</td><td class="money">` + amt + `</td></tr>`)
+			b.WriteString(`<tr><td><small>` + timeFmt(p.ReceivedAt) + `</small></td><td><code>` + esc(p.Pkg) + `</code></td><td>` + esc(p.Title) + `</td><td class="money">` + amt + `</td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
 		if len(unm) > 0 {
 			b.WriteString(`<div class="card"><h2>Unmatched</h2><table>
 <tr><th>Waktu</th><th class="money">Amount</th><th>Alasan</th></tr>`)
 			for _, u := range unm {
-				b.WriteString(`<tr><td><small>` + timeFmt(u.ReceivedAt) + `</small></td><td class="money">` + rp(u.Amount) + `</td><td>` + u.Reason + `</td></tr>`)
+				b.WriteString(`<tr><td><small>` + timeFmt(u.ReceivedAt) + `</small></td><td class="money">` + rp(u.Amount) + `</td><td>` + esc(u.Reason) + `</td></tr>`)
 			}
 			b.WriteString(`</table></div>`)
 		}
@@ -315,14 +315,14 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 				tokShow = tokShow[:16] + "…" + tokShow[len(tokShow)-4:]
 			}
 			b.WriteString(`<tr>
-<td><b>` + a.Name + `</b></td>
+<td><b>` + esc(a.Name) + `</b></td>
 <td><code class="tok" title="` + tokFull + `" onclick="navigator.clipboard.writeText('` + tokFull + `');this.style.outline='2px solid #1a7f37';setTimeout(()=>this.style.outline='',600)" style="cursor:pointer">` + tokShow + `</code></td>
 <td>` + sc + `</td>
 <td>` + st + `</td>
 <td><small>` + timeFmt(a.Created) + `</small></td>
 <td style="white-space:nowrap"><form method="post" class="inline"><input type="hidden" name="act" value="rotate"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="sec">Rotate</button></form>
 <form method="post" class="inline"><input type="hidden" name="act" value="toggle"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="sec">` + map[bool]string{true: "Matikan", false: "Aktifkan"}[a.Active] + `</button></form>
-<form method="post" class="inline" onsubmit="return confirm('Hapus aplikasi ` + a.Name + `?')"><input type="hidden" name="act" value="del"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
+<form method="post" class="inline" onsubmit="return confirm('Hapus aplikasi ` + esc(a.Name) + `?')"><input type="hidden" name="act" value="del"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
 		}
 		b.WriteString(`</table><small>Klik token untuk copy. Rotate = token lama langsung mati.</small></div>`)
 		return template.HTML(b.String())
@@ -490,7 +490,7 @@ var r=new FileReader();r.onload=function(){document.getElementById('imgdata').va
 				if !hk.Active {
 					st = `<span class="badge expired">off</span>`
 				}
-				b.WriteString(`<tr><td><code>` + hk.URL + `</code></td><td>` + st + `</td>
+				b.WriteString(`<tr><td><code>` + esc(hk.URL) + `</code></td><td>` + st + `</td>
 <td style="white-space:nowrap"><form method="post" class="inline"><input type="hidden" name="act" value="wh_toggle"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="sec">` + map[bool]string{true: "Matikan", false: "Aktifkan"}[hk.Active] + `</button></form>
 <form method="post" class="inline" onsubmit="return confirm('Hapus webhook ini?')"><input type="hidden" name="act" value="wh_del"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
 			}

@@ -2,6 +2,9 @@ package main
 
 import (
 	"net/http"
+	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -61,7 +64,68 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// ---------- security headers middleware ----------
+// ---------- rate limit API (per token, brute-force guard) ----------
+
+type apiLimit struct {
+	mu    sync.Mutex
+	hits  map[string][]time.Time
+}
+
+var apiLimiter = &apiLimit{hits: map[string][]time.Time{}}
+
+const (
+	apiWindow = time.Minute
+	apiMax    = 60 // 60 req/menit per token — jauh di atas kebutuhan normal
+)
+
+func (l *apiLimit) allow(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	keep := l.hits[key][:0]
+	for _, t := range l.hits[key] {
+		if now.Sub(t) < apiWindow {
+			keep = append(keep, t)
+		}
+	}
+	l.hits[key] = keep
+	if len(keep) >= apiMax {
+		return false
+	}
+	l.hits[key] = append(keep, now)
+	return true
+}
+
+// ---------- backup DB otomatis ----------
+
+// backupWorker: copy paypan.db tiap 6 jam ke folder backup/ (maks 28 file).
+func (s *srv) backupWorker(dbPath string) {
+	for range time.Tick(6 * time.Hour) {
+		_ = os.MkdirAll("backup", 0755)
+		name := "backup/paypan-" + time.Now().Format("2006-01-02-1504") + ".db"
+		// WAL checkpoint dulu biar file konsisten
+		s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+		src, err := os.ReadFile(dbPath)
+		if err != nil {
+			continue
+		}
+		os.WriteFile(name, src, 0600)
+		// buang backup lama, sisakan 28
+		files, _ := os.ReadDir("backup")
+		var names []string
+		for _, f := range files {
+			if strings.HasPrefix(f.Name(), "paypan-") {
+				names = append(names, f.Name())
+			}
+		}
+		if len(names) > 28 {
+			sort.Strings(names)
+			for _, f := range names[:len(names)-28] {
+				os.Remove("backup/" + f)
+			}
+		}
+	}
+}
 
 func secureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

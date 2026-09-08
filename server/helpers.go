@@ -13,6 +13,15 @@ func itoa64(n int64) string   { return strconv.FormatInt(n, 10) }
 func fmt_Sscan(s string, v *int64) { fmt.Sscan(s, v) }
 func os_WriteFile(p string, d []byte, m os.FileMode) { os.WriteFile(p, d, m) }
 
+// esc: escape HTML utk semua teks dari user/device sebelum masuk markup admin
+func esc(s string) string {
+	r := strings.NewReplacer(
+		"&", "&amp;", "<", "&lt;", ">", "&gt;",
+		`"`, "&#34;", "'", "&#39;",
+	)
+	return r.Replace(s)
+}
+
 type orderLite struct {
 	ID        string
 	Status    string

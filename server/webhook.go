@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -73,15 +76,29 @@ func (s *srv) deliverWebhook(url string, payload []byte) int {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Paypan-Event", "order.paid")
-	if s.token != "" {
-		req.Header.Set("X-Paypan-Signature", s.token) // ponytail: HMAC kalau webhook multi-pihak
-	}
+	// HMAC signature: penerima bisa verifikasi asli/palsu
+	// signature = hex(HMAC_SHA256(secret, body)); secret = webhook secret (settings)
+	mac := hmac.New(sha256.New, []byte(s.webhookSecret()))
+	mac.Write(payload)
+	req.Header.Set("X-Paypan-Signature", hex.EncodeToString(mac.Sum(nil)))
 	resp, err := s.httpc.Do(req)
 	if err != nil {
 		return -1
 	}
 	resp.Body.Close()
 	return resp.StatusCode
+}
+
+// webhookSecret: secret bersama utk verifikasi HMAC di sisi penerima
+func (s *srv) webhookSecret() string {
+	var sec string
+	s.db.QueryRow("SELECT value FROM settings WHERE key='webhook_secret'").Scan(&sec)
+	if sec == "" {
+		// auto-generate sekali
+		sec = genToken()
+		s.db.Exec("INSERT INTO settings(key,value) VALUES('webhook_secret',?)", sec)
+	}
+	return sec
 }
 
 // manualPaid: tandai order lunas manual (dari halaman detail) + fire webhook.

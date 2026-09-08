@@ -103,6 +103,7 @@ func main() {
 	})
 
 	go s.expireWorker()
+	go s.backupWorker(*dbPath)
 	log.Printf("Paypan server listening %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, secureHeaders(mux)))
 }

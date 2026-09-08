@@ -118,7 +118,7 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 <small>Link checkout publik: <code>/pay/` + id + `</code></small></div>`)
 		b.WriteString(`<div class="card"><h2>Notif pembayaran terkait</h2>
 <table><tr><th>App</th><th>Judul</th><th>Isi</th><th>Diterima</th></tr>
-<tr><td><code>` + payPkg + `</code></td><td>` + payTitle + `</td><td>` + payText + `</td><td>` + fm(payAt.Int64) + `</td></tr></table></div>`)
+<tr><td><code>` + esc(payPkg) + `</code></td><td>` + esc(payTitle) + `</td><td>` + esc(payText) + `</td><td>` + fm(payAt.Int64) + `</td></tr></table></div>`)
 		if len(whs) > 0 {
 			b.WriteString(`<div class="card"><h2>Webhook terkirim</h2><table><tr><th>Waktu</th><th>URL</th><th>HTTP</th></tr>`)
 			for _, w := range whs {

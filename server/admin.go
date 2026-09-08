@@ -55,10 +55,13 @@ func genToken() string {
 	return "pp_" + string(out)
 }
 
-// authApps: token valid + punya scope yg dibutuhkan. scope: "notif" | "order"
+// authScope: token valid + scope cocok + rate limit per token
 func (s *srv) authScope(r *http.Request, scope string) (string, bool) {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if tok == "" {
+		return "", false
+	}
+	if !apiLimiter.allow(tok) {
 		return "", false
 	}
 	var scopes string

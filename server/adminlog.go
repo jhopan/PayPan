@@ -69,7 +69,7 @@ func (s *srv) handleAdminLog(w http.ResponseWriter, r *http.Request) {
 			case strings.Contains(act, "login"):
 				cls = "badge pending"
 			}
-			sb.WriteString(`<tr><td><small>` + l["at"] + `</small></td><td>` + l["actor"] + `</td><td><span class="` + cls + `">` + act + `</span></td><td>` + l["detail"] + `</td></tr>`)
+			sb.WriteString(`<tr><td><small>` + l["at"] + `</small></td><td>` + esc(l["actor"]) + `</td><td><span class="` + cls + `">` + act + `</span></td><td>` + esc(l["detail"]) + `</td></tr>`)
 		}
 		sb.WriteString(`</table><div style="margin-top:10px">`)
 		if page > 1 {
