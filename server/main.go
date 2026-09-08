@@ -20,14 +20,15 @@ func main() {
 	if *tok == "" {
 		*tok = os.Getenv("PAYPAN_TOKEN")
 	}
-	if *tok == "" {
-		log.Fatal("token wajib: -token atau PAYPAN_TOKEN")
-	}
+	// token dari flag/env hanya dipakai sebagai token "master" awal;
+	// auth sesungguhnya = tabel apps (dikelola via web admin)
 
 	db, err := initDB(*dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	ensureAdminDefaults(db)
 
 	// template QRIS statis: raw text payload, dibaca sekali saat start
 	qrisBytes, err := os.ReadFile("qris_base.txt")
@@ -47,17 +48,30 @@ func main() {
 		tgChat:  *tgChat,
 		httpc:   &http.Client{Timeout: 10 * time.Second},
 	}
+	_ = s.token // legacy: auth lewat authScope (tabel apps)
 
 	mux := http.NewServeMux()
+	// API (auth per-app token)
 	mux.HandleFunc("/api/notif", s.handleNotif)
 	mux.HandleFunc("/api/order", s.handleOrderCreate)
 	mux.HandleFunc("/api/order/", s.handleOrderStatus)
+	// checkout publik
 	mux.HandleFunc("/pay/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/qr.png") {
 			s.handleQR(w, r)
 		} else {
 			s.handleCheckout(w, r)
 		}
+	})
+	// admin web
+	mux.HandleFunc("/static/", s.staticHandler)
+	mux.HandleFunc("/admin/login", s.handleLogin)
+	mux.HandleFunc("/admin/logout", s.handleLogout)
+	mux.HandleFunc("/admin/apps", s.handleAdminApps)
+	mux.HandleFunc("/admin/config", s.handleAdminConfig)
+	mux.HandleFunc("/admin", s.handleAdminHome)
+	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin", 302)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

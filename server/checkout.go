@@ -11,7 +11,9 @@ import (
 )
 
 //go:embed static/*
-var staticFS embed.FS
+var checkoutStaticFS embed.FS
+
+func (s *srv) checkoutStaticRef() embed.FS { return checkoutStaticFS }
 
 // GET /pay/{id} — halaman checkout: QR dinamis + polling status.
 func (s *srv) handleCheckout(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +52,7 @@ func (s *srv) handleCheckout(w http.ResponseWriter, r *http.Request) {
 	tmpl, _ := template.New("p").Parse(checkoutHTML)
 	tmpl.Execute(w, map[string]any{"ID": id, "Status": status, "Total": total})
 	_ = png
-	_ = staticFS
+	_ = checkoutStaticFS
 }
 
 // GET /pay/{id}/qr.png — gambar QR dinamis per order.

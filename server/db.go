@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS settings (
 	key TEXT PRIMARY KEY,
 	value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS apps (
+	name TEXT NOT NULL,
+	token TEXT UNIQUE NOT NULL,
+	scopes TEXT NOT NULL DEFAULT 'both',
+	active INTEGER NOT NULL DEFAULT 1,
+	created_at INTEGER NOT NULL
+);
 `
 
 func initDB(path string) (*sql.DB, error) {

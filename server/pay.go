@@ -136,10 +136,12 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 405, map[string]string{"error": "method"})
 		return
 	}
-	if !s.auth(r) {
+	appName, ok := s.authScope(r, "notif")
+	if !ok {
 		s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
+	_ = appName
 	var n notifReq
 	if err := json.NewDecoder(r.Body).Decode(&n); err != nil || n.ID == "" {
 		s.writeJSON(w, 400, map[string]string{"error": "bad json"})
@@ -159,6 +161,8 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 200, map[string]any{"ok": true, "dup": true})
 		return
 	}
+	// catat aplikasi mana yang mengirim (dari token, diisi authScope)
+	r.Header.Set("X-App", appName)
 	if n.Amount == nil || *n.Amount <= 0 {
 		// bukan pembayaran (tidak ada nominal) — cukup tersimpan di payments
 		s.writeJSON(w, 200, map[string]any{"ok": true, "matched": false})
@@ -204,7 +208,7 @@ func (s *srv) handleOrderCreate(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 405, map[string]string{"error": "method"})
 		return
 	}
-	if !s.auth(r) {
+	if _, ok := s.authScope(r, "order"); !ok {
 		s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
