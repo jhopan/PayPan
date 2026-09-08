@@ -298,14 +298,14 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		case "qrisimg":
 			// upload gambar QRIS: decode QR dari gambar -> payload teks auto-terisi.
-			// gambar + payload disimpan bareng = selalu sinkron.
+			// gambar + payload disimpan bareng = selalu sinkron. Gambar besar dikompres otomatis.
 			img := strings.TrimSpace(r.FormValue("img"))
 			if !strings.HasPrefix(img, "data:image/png;base64,") && !strings.HasPrefix(img, "data:image/jpeg;base64,") {
 				flash = "Format harus PNG/JPG"
 				break
 			}
-			if len(img) > 700_000 {
-				flash = "Gambar terlalu besar (max ~500KB)"
+			if len(img) > qrisMaxUploadBase64 {
+				flash = "Gambar terlalu besar (max ~5 MB)"
 				break
 			}
 			payload, err := decodeQRFromDataURL(img)
@@ -313,10 +313,15 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 				flash = "QR pada gambar tidak terbaca / bukan QRIS statis. Paste payload manual di kolom sebelah, lalu Simpan Payload."
 				break
 			}
+			img, compressed := compressQRImage(img)
 			s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_image',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", img)
 			s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_base',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", payload)
 			os.WriteFile("qris_base.txt", []byte(payload), 0600)
-			s.audit(actor, "qris.image", "upload gambar + payload "+itoa(len(payload))+" char (sinkron)")
+			detail := "upload gambar + payload " + itoa(len(payload)) + " char (sinkron)"
+			if compressed {
+				detail += ", dikompres jadi " + itoa(len(img)) + " b64"
+			}
+			s.audit(actor, "qris.image", detail)
 			flash = "QRIS tersimpan: gambar + payload sinkron"
 		case "qrisimg_del":
 			s.db.Exec("DELETE FROM settings WHERE key='qris_image'")
