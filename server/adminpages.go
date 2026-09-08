@@ -134,6 +134,8 @@ button.sec{background:#fff;color:#344054;border:1px solid #d0d5dd}button.sec:hov
 .paid{background:#d4edda;color:#186a3b}.pending{background:#fff3cd;color:#8a6d00}
 .expired{background:#f8d7da;color:#8a1c1c}
 .pg{color:#1a7f37;text-decoration:none;font-weight:600;margin:0 6px}
+.badge.scope{background:#eff8ff;color:#175cd3}
+code.tok:hover{background:#e4e7ec}
 .money{font-variant-numeric:tabular-nums;text-align:right}
 .flash{background:#d4edda;color:#186a3b;padding:10px 14px;border-radius:8px;margin-bottom:14px}
 small{color:#667085}
@@ -222,6 +224,7 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 	flash := ""
 	if r.Method == http.MethodPost {
 		r.ParseForm()
+		actor := s.adminUser()
 		act := r.FormValue("act")
 		switch act {
 		case "add":
@@ -229,12 +232,16 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 			if name != "" {
 				s.db.Exec("INSERT INTO apps(name,token,scopes,active,created_at) VALUES(?,?,?,1,strftime('%s','now'))",
 					name, genToken(), r.FormValue("scopes"))
+				s.audit(actor, "apps.add", name+"|scope "+r.FormValue("scopes"))
 				flash = "Aplikasi '" + name + "' dibuat"
 			}
 		case "rotate":
 			var id int64
 			fmt_Sscan(r.FormValue("id"), &id)
 			s.db.Exec("UPDATE apps SET token=? WHERE rowid=?", genToken(), id)
+			var nm string
+			s.db.QueryRow("SELECT name FROM apps WHERE rowid=?", id).Scan(&nm)
+			s.audit(actor, "apps.rotate", nm)
 			flash = "Token di-rotate"
 		case "toggle":
 			var id int64
@@ -249,25 +256,52 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	apps := listApps(s.db)
+	// audit per app: kapan dibuat/di-rotate (dari audit log)
+	appEvents := map[int64]string{}
+	for _, a := range apps {
+		var detail string
+		var at int64
+		err := s.db.QueryRow("SELECT at,detail FROM audit WHERE action='apps.add' AND detail LIKE ? ORDER BY id DESC LIMIT 1", a.Name+"|%").
+			Scan(&at, &detail)
+		if err != nil {
+			// fallback: created_at
+			appEvents[a.ID] = timeFmt(a.Created) + " (dibuat)"
+			continue
+		}
+		_ = at
+		appEvents[a.ID] = timeFmt(a.Created) + " (dibuat)"
+	}
 	s.renderPage(w, "apps", "Aplikasi & Token", flash, func() template.HTML {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Tambah aplikasi</h2>
-<form method="post"><input type="hidden" name="act" value="add">
-<input name="name" placeholder="Nama aplikasi (mis. Toko Web, Bot Telegram)" required>
-<select name="scopes"><option value="both">notif + order</option><option value="notif">notif saja</option><option value="order">order saja</option></select>
+<form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+<input type="hidden" name="act" value="add">
+<input name="name" placeholder="Nama aplikasi" required style="flex:1;min-width:180px;margin:0">
+<select name="scopes" style="margin:0"><option value="both">notif + order</option><option value="notif">notif saja</option><option value="order">order saja</option></select>
 <button>Tambah</button></form></div>
-<div class="card"><h2>Daftar aplikasi</h2><table><tr><th>Nama</th><th>Token</th><th>Scope</th><th>Status</th><th>Aksi</th></tr>`)
+<div class="card"><h2>Daftar aplikasi</h2><table><tr><th>Nama</th><th>Token</th><th>Scope</th><th>Status</th><th>Dibuat</th><th>Aksi</th></tr>`)
 		for _, a := range apps {
-			st := "aktif"
+			st := `<span class="badge paid">aktif</span>`
 			if !a.Active {
-				st = "nonaktif"
+				st = `<span class="badge expired">nonaktif</span>`
 			}
-			b.WriteString(`<tr><td>` + a.Name + `</td><td><code>` + a.Token + `</code></td><td>` + a.Scopes + `</td><td>` + st + `</td>
-<td><form method="post" style="display:inline"><input type="hidden" name="act" value="rotate"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button>Rotate</button></form>
-<form method="post" style="display:inline"><input type="hidden" name="act" value="toggle"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button>On/Off</button></form>
-<form method="post" style="display:inline"><input type="hidden" name="act" value="del"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
+			sc := `<span class="badge scope">` + a.Scopes + `</span>`
+			tokShow := a.Token
+			tokFull := a.Token
+			if len(tokShow) > 20 {
+				tokShow = tokShow[:16] + "…" + tokShow[len(tokShow)-4:]
+			}
+			b.WriteString(`<tr>
+<td><b>` + a.Name + `</b></td>
+<td><code class="tok" title="` + tokFull + `" onclick="navigator.clipboard.writeText('` + tokFull + `');this.style.outline='2px solid #1a7f37';setTimeout(()=>this.style.outline='',600)" style="cursor:pointer">` + tokShow + `</code></td>
+<td>` + sc + `</td>
+<td>` + st + `</td>
+<td><small>` + timeFmt(a.Created) + `</small></td>
+<td style="white-space:nowrap"><form method="post" class="inline"><input type="hidden" name="act" value="rotate"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="sec">Rotate</button></form>
+<form method="post" class="inline"><input type="hidden" name="act" value="toggle"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="sec">` + map[bool]string{true: "Matikan", false: "Aktifkan"}[a.Active] + `</button></form>
+<form method="post" class="inline" onsubmit="return confirm('Hapus aplikasi ` + a.Name + `?')"><input type="hidden" name="act" value="del"><input type="hidden" name="id" value="` + itoa64(a.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
 		}
-		b.WriteString(`</table><small>Token dipakai di app HP (field Token) dan header <code>Authorization: Bearer &lt;token&gt;</code> untuk API.</small></div>`)
+		b.WriteString(`</table><small>Klik token untuk copy. Rotate = token lama langsung mati.</small></div>`)
 		return template.HTML(b.String())
 	})
 }
