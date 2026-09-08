@@ -112,6 +112,54 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 
 	curMonth := time.Now().Format("2006-01")
 
+	// daftar transaksi paid terbaru (bisa difilter per bulan)
+	filterMonth := r.URL.Query().Get("bulan")
+	listQ := `SELECT id,total,COALESCE(source,''),paid_at FROM orders WHERE status='paid'`
+	var listArgs []any
+	if filterMonth != "" && len(filterMonth) == 7 {
+		start, err := time.Parse("2006-01", filterMonth)
+		if err == nil {
+			listQ += ` AND paid_at BETWEEN ? AND ?`
+			listArgs = append(listArgs, start.Unix(), start.AddDate(0, 1, 0).Unix()-1)
+		}
+	}
+	listQ += ` ORDER BY paid_at DESC LIMIT 50`
+	txRows, err := s.db.Query(listQ, listArgs...)
+	type txRow struct {
+		ID, Source string
+		Total      int64
+		PaidAt     int64
+	}
+	var txs []txRow
+	if err == nil {
+		for txRows.Next() {
+			var t txRow
+			txRows.Scan(&t.ID, &t.Total, &t.Source, &t.PaidAt)
+			txs = append(txs, t)
+		}
+		txRows.Close()
+	}
+
+	// rekap harian (30 hari terakhir, hanya paid)
+	dayRows, err := s.db.Query(`
+		SELECT date(paid_at,'unixepoch'), COUNT(*), SUM(total)
+		FROM orders WHERE status='paid' AND paid_at > strftime('%s','now') - 30*86400
+		GROUP BY 1 ORDER BY 1 DESC LIMIT 30`)
+	type dayRow struct {
+		Day     string
+		Count   int64
+		Revenue int64
+	}
+	var days []dayRow
+	if err == nil {
+		for dayRows.Next() {
+			var d dayRow
+			dayRows.Scan(&d.Day, &d.Count, &d.Revenue)
+			days = append(days, d)
+		}
+		dayRows.Close()
+	}
+
 	s.renderPage(w, "laporan", "Laporan", flash, func() template.HTML {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Rekap per bulan</h2><table>
@@ -127,6 +175,42 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 			b.WriteString(`<tr><td><b>` + label + `</b></td><td class="money">` + itoa64(mr.Paid) + `</td><td class="money">` + itoa64(mr.Expired) + `</td><td class="money">` + rp(mr.Revenue) + `</td></tr>`)
 		}
 		b.WriteString(`</table><small>Hanya order <b>paid</b> dihitung pendapatan.</small></div>`)
+
+		// rekap harian 30 hari
+		b.WriteString(`<div class="card"><h2>Rekap harian (30 hari terakhir)</h2><table>
+<tr><th>Tanggal</th><th class="money">Transaksi</th><th class="money">Pendapatan</th></tr>`)
+		if len(days) == 0 {
+			b.WriteString(`<tr><td colspan="3" class="empty">Belum ada transaksi</td></tr>`)
+		}
+		for _, d := range days {
+			t, _ := time.Parse("2006-01-02", d.Day)
+			b.WriteString(`<tr><td>` + t.Format("02 Jan 2006") + `</td><td class="money">` + itoa64(d.Count) + `</td><td class="money">` + rp(d.Revenue) + `</td></tr>`)
+		}
+		b.WriteString(`</table></div>`)
+
+		// daftar transaksi paid (filter per bulan)
+		b.WriteString(`<div class="card"><h2>Transaksi Lunas</h2>
+<form method="get" style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+<input type="month" name="bulan" value="` + (func() string {
+			if filterMonth != "" {
+				return filterMonth
+			}
+			return curMonth
+		})() + `" style="margin:0">
+<button class="sec">Filter</button>
+<a class="pg" href="/admin/laporan" style="margin-left:8px">Semua</a></form>
+<table><tr><th>Waktu dibayar</th><th>Sumber</th><th>ID Order</th><th class="money">Total</th></tr>`)
+		if len(txs) == 0 {
+			b.WriteString(`<tr><td colspan="4" class="empty">Tidak ada transaksi lunas</td></tr>`)
+		}
+		for _, t := range txs {
+			b.WriteString(`<tr><td><small>` + timeFmt(t.PaidAt) + `</small></td><td>` + esc(t.Source) + `</td><td><code>` + t.ID + `</code></td><td class="money"><b>` + rp(t.Total) + `</b></td></tr>`)
+		}
+		b.WriteString(`</table><small>Maks 50 transaksi terbaru.`)
+		if filterMonth != "" {
+			b.WriteString(` Filter: ` + filterMonth)
+		}
+		b.WriteString(`</small></div>`)
 
 		b.WriteString(`<div class="card"><h2>Hapus data per bulan</h2>
 <form method="post" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
