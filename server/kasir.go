@@ -51,8 +51,18 @@ func (s *srv) handleKasir(w http.ResponseWriter, r *http.Request) {
 
 	s.renderPage(w, "kasir", "Kasir", r.URL.Query().Get("m"), func() template.HTML {
 		var sb strings.Builder
-		sb.WriteString(`<div class="card" style="max-width:460px;margin:0 auto">
-<h2 style="margin:0 0 12px">Buat Tagihan</h2>`)
+		sb.WriteString(`<style>
+.kasir{max-width:420px;margin:0 auto;text-align:center}
+.kasir .amt{font-size:34px;font-weight:800;color:#101828;margin:4px 0 10px}
+.kasir .qrbox{background:#fff;border:1px solid #e4e7ec;border-radius:14px;padding:14px;display:inline-block;margin:10px 0}
+.kasir .qrbox img{width:240px;height:240px;display:block}
+.kasir .done{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px;margin-top:14px}
+.kasir .done .ok{font-size:40px;line-height:1}
+.kasir .hint{color:#667085;font-size:13px;text-align:center}
+.kasir .order-id{font-family:monospace;font-size:11px;color:#98a2b3;margin-top:8px}
+.kasir button{margin-top:12px}
+</style>
+<div class="kasir">`)
 		sb.WriteString(inner)
 		sb.WriteString(`</div>`)
 		sb.WriteString(script)

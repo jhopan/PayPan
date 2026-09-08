@@ -1,60 +1,22 @@
-<!doctype html>
-<html lang="id">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kasir — Paypan</title>
-<style>
-*{box-sizing:border-box}
-body{font-family:system-ui,sans-serif;background:#f2f4f8;margin:0;display:flex;justify-content:center;min-height:100vh;padding:24px}
-.card{background:#fff;border-radius:16px;padding:28px;max-width:380px;width:100%;box-shadow:0 2px 16px rgba(0,0,0,.08);text-align:center;height:fit-content}
-.logo{font-weight:800;font-size:20px;margin-bottom:4px}
-.logo span{color:#1a7f37}
-.sub{color:#667085;font-size:13px;margin-bottom:20px}
-label{display:block;text-align:left;font-size:13px;font-weight:600;color:#344054;margin:14px 0 6px}
-input{width:100%;padding:14px;font-size:22px;border:1px solid #d0d5dd;border-radius:10px;text-align:right;font-variant-numeric:tabular-nums}
-input:focus{outline:2px solid #1a7f37;border-color:#1a7f37}
-.hint{font-size:12px;color:#98a2b3;text-align:left;margin-top:4px}
-button{width:100%;padding:14px;margin-top:16px;background:#1a7f37;color:#fff;border:0;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer}
-button:disabled{background:#98a2b3;cursor:wait}
-.preview{font-size:14px;color:#344054;background:#f9fafb;border-radius:10px;padding:10px;margin-top:14px;display:none}
-.preview b{font-size:20px}
-.qr{width:270px;height:270px;margin:14px auto 0;border:1px solid #eee;border-radius:12px;padding:8px;display:none}
-.amt{font-size:30px;font-weight:800;margin:6px 0}
-.badge{display:inline-block;padding:6px 16px;border-radius:999px;font-weight:700;font-size:14px}
-.pending{background:#fff3cd;color:#8a6d00}
-.paid{background:#d4edda;color:#186a3b}
-.expired{background:#fee4e2;color:#b42318}
-.order-id{font-size:11px;color:#98a2b3;margin-top:10px;font-family:monospace}
-.done{background:#f9fafb;border-radius:12px;padding:16px;margin-top:14px;display:none}
-.done .ok{font-size:44px}
-small{color:#98a2b3}
-</style>
-</head>
-<body>
-<div class="card">
 <div id="formView">
-<div class="logo">Pay<span>pan</span> Kasir</div>
-<div class="sub">Buat tagihan QRIS · by JhopanStore</div>
-<label>Nominal tagihan (Rp)</label>
-<input type="number" id="price" inputmode="numeric" placeholder="0" min="1" max="9000000" autofocus>
-<div class="hint">Kode unik 1-999 akan ditambahkan otomatis agar bisa dicocokkan</div>
+<div class="amt" style="font-size:26px;font-weight:700">Buat Tagihan</div>
+<label style="display:block;font-size:13px;color:#344054;font-weight:600;margin:14px 0 6px">Nominal tagihan (Rp)</label>
+<input type="number" id="price" inputmode="numeric" placeholder="0" min="1" max="9000000" style="width:100%;padding:12px;font-size:22px;border:1px solid #d0d5dd;border-radius:10px;text-align:center;box-sizing:border-box">
+<div class="hint">Kode unik 1-999 ditambahkan otomatis agar bisa dicocokkan</div>
 <button id="btn" onclick="buat()">Buat QRIS</button>
-<div class="preview" id="pv"></div>
 </div>
 
 <div id="payView" style="display:none">
 <div class="amt" id="amt"></div>
-<span class="badge pending" id="badge">MENUNGGU PEMBAYARAN</span>
-<img class="qr" id="qr" alt="QRIS">
-<div class="hint" style="text-align:center">Scan dengan e-wallet / m-banking.<br>Nominal sudah terisi otomatis.</div>
+<div><span class="badge pending" id="badge">MENUNGGU PEMBAYARAN</span></div>
+<div class="qrbox"><img id="qr" alt="QRIS"></div>
+<div class="hint">Scan dengan e-wallet / m-banking.<br>Nominal sudah terisi otomatis.</div>
 <div class="order-id" id="oid"></div>
-<div class="done" id="done">
+<div class="done" id="done" style="display:none">
 <div class="ok">✅</div>
 <b>PEMBAYARAN DITERIMA</b>
 </div>
 <button id="again" style="display:none;background:#101828" onclick="reset()">Buat Tagihan Baru</button>
-</div>
 </div>
 
 <script>
@@ -98,16 +60,16 @@ async function poll(id){
     const b = document.getElementById('badge');
     b.className = 'badge ' + j.status;
     if(j.status === 'paid'){
-      b.textContent = 'LUNAS — TERIMA KASIH';
+      b.textContent = 'LUNAS';
       document.getElementById('done').style.display = 'block';
-      document.getElementById('qr').style.filter = 'grayscale(1)';
-      document.getElementById('qr').style.opacity = .5;
+      document.getElementById('qr').style.display = 'none';
+      document.getElementById('qr').parentElement.style.display = 'none';
       document.getElementById('again').style.display = 'block';
       return;
     }
     if(j.status === 'expired'){
       b.textContent = 'KADALUARSA';
-      document.getElementById('qr').style.display = 'none';
+      document.getElementById('qr').parentElement.style.display = 'none';
       document.getElementById('again').style.display = 'block';
       return;
     }
@@ -124,12 +86,9 @@ function reset(){
   document.getElementById('price').value = '';
   document.getElementById('done').style.display = 'none';
   document.getElementById('again').style.display = 'none';
-  document.getElementById('qr').style.filter = '';
-  document.getElementById('qr').style.opacity = 1;
+  document.getElementById('qr').parentElement.style.display = 'inline-block';
   document.getElementById('btn').disabled = false;
   document.getElementById('btn').textContent = 'Buat QRIS';
 }
 document.getElementById('price').addEventListener('keydown', e => { if(e.key==='Enter') buat(); });
 </script>
-</body>
-</html>
