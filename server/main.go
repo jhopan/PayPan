@@ -65,8 +65,25 @@ func main() {
 			s.handleCheckout(w, r)
 		}
 	})
-	// admin web
+	// kasir: buat tagihan cepat dari browser
+	mux.HandleFunc("/qr/", func(w http.ResponseWriter, r *http.Request) {
+		// /qr/{id}.png -> sama dengan /pay/{id}/qr.png
+		p := strings.TrimPrefix(r.URL.Path, "/qr/")
+		p = strings.TrimSuffix(p, ".png")
+		r.URL.Path = "/pay/" + p + "/qr.png"
+		s.handleQR(w, r)
+	})
 	mux.HandleFunc("/static/", s.staticHandler)
+	mux.HandleFunc("/kasir", func(w http.ResponseWriter, r *http.Request) {
+		b, err := staticFS.ReadFile("static/kasir.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(b)
+	})
+	// admin web
 	mux.HandleFunc("/admin/login", s.handleLogin)
 	mux.HandleFunc("/admin/logout", s.handleLogout)
 	mux.HandleFunc("/admin/apps", s.handleAdminApps)
