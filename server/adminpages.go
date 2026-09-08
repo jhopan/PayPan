@@ -438,7 +438,7 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 
 	s.renderPage(w, "config", "Konfigurasi", flash, func() template.HTML {
 		var b strings.Builder
-		// QRIS: gambar + payload dalam SATU kartu, simpan bareng = selalu sinkron
+		// ---- QRIS Statis ----
 		b.WriteString(`<div class="card"><h2>QRIS Statis</h2>
 <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:12px">`)
 		b.WriteString(`<div style="flex:0 0 200px;text-align:center">
@@ -458,7 +458,6 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		if curImg != "" {
 			b.WriteString(`<form method="post" id="delimg"></form>`)
 		}
-		// tombol hapus: form terpisah aktif via JS biar gak nested form
 		if curImg != "" {
 			b.WriteString(`<script>document.addEventListener('DOMContentLoaded',function(){var d=document.getElementById('delimg');if(d){var f=document.createElement('form');f.method='post';f.style.display='none';f.innerHTML='<input type=hidden name=act value=qrisimg_del>';document.body.appendChild(f);document.getElementById('delimg').type='button';document.getElementById('delimg').onclick=function(){f.submit()}}})</script>`)
 		}
@@ -473,37 +472,43 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 function upl(){var f=document.getElementById('qrfile').files[0];if(!f){alert('pilih file');return}
 var r=new FileReader();r.onload=function(){document.getElementById('imgdata').value=r.result;document.getElementById('imgdata').form.submit()};r.readAsDataURL(f)}
 </script></div>`)
+		// ---- Notifikasi Telegram ----
+		b.WriteString(`<div class="card"><h2>Notifikasi Telegram</h2>
+<form method="post" style="max-width:420px"><input type="hidden" name="act" value="tg">
+<label style="font-size:13px;color:#344054;font-weight:600">Bot Token</label>
+<input name="tgtoken" placeholder="123456:ABC-DEF..." value="` + tgToken + `" style="width:100%">
+<label style="font-size:13px;color:#344054;font-weight:600">Chat ID</label>
+<input name="tgchat" placeholder="1491946180 (beberapa: pisah koma)" value="` + tgChat + `" style="width:100%">
+<button style="margin-top:10px">Simpan</button></form></div>`)
+		// ---- Webhook ----
 		b.WriteString(`<div class="card"><h2>Webhook</h2>`)
 		hooks := s.listWebhooks()
 		if len(hooks) > 0 {
 			b.WriteString(`<table><tr><th>URL</th><th>Status</th><th>Aksi</th></tr>`)
 			for _, hk := range hooks {
-				st := "aktif"
+				st := `<span class="badge paid">aktif</span>`
 				if !hk.Active {
-					st = "off"
+					st = `<span class="badge expired">off</span>`
 				}
 				b.WriteString(`<tr><td><code>` + hk.URL + `</code></td><td>` + st + `</td>
-<td><form method="post" class="inline"><input type="hidden" name="act" value="wh_toggle"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="sec">On/Off</button></form>
-<form method="post" class="inline"><input type="hidden" name="act" value="wh_del"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
+<td style="white-space:nowrap"><form method="post" class="inline"><input type="hidden" name="act" value="wh_toggle"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="sec">` + map[bool]string{true: "Matikan", false: "Aktifkan"}[hk.Active] + `</button></form>
+<form method="post" class="inline" onsubmit="return confirm('Hapus webhook ini?')"><input type="hidden" name="act" value="wh_del"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
 			}
 			b.WriteString(`</table>`)
+		} else {
+			b.WriteString(`<p class="empty" style="color:#98a2b3;font-size:14px;margin:6px 0">Belum ada webhook</p>`)
 		}
-		b.WriteString(`<form method="post"><input type="hidden" name="act" value="wh_add">
-<input name="url" placeholder="https://website-loke/api/webhook" style="width:70%">
-<button>Tambah Webhook</button></form>
-<small>POST JSON <code>{event:"order.paid", order:{id,price,code,total,paid_at}}</code> + header <code>X-Paypan-Event</code>. Retry 2x jika gagal.</small></div>`)
-		b.WriteString(`<div class="card"><h2>Notifikasi Telegram (opsional)</h2>
-<form method="post"><input type="hidden" name="act" value="tg">
-<input name="tgtoken" placeholder="Bot token" value="` + tgToken + `" style="width:100%">
-<input name="tgchat" placeholder="Chat ID tujuan" value="` + tgChat + `" style="width:100%">
-<button>Simpan Telegram</button></form></div>`)
-		b.WriteString(`<div class="card"><h2>Login admin</h2>
-<form method="post"><input type="hidden" name="act" value="pass">
-<label style="font-size:13px;color:#344054">Username</label>
+		b.WriteString(`<form method="post" style="display:flex;gap:10px;margin-top:10px"><input type="hidden" name="act" value="wh_add">
+<input name="url" placeholder="https://website-anda/api/webhook" style="flex:1;margin:0" required>
+<button>Tambah</button></form></div>`)
+		// ---- Login Admin ----
+		b.WriteString(`<div class="card"><h2>Login Admin</h2>
+<form method="post" style="max-width:420px"><input type="hidden" name="act" value="pass">
+<label style="font-size:13px;color:#344054;font-weight:600">Username</label>
 <input name="newuser" placeholder="username baru (opsional)" value="` + s.adminUser() + `" style="width:100%">
-<label style="font-size:13px;color:#344054">Password baru</label>
+<label style="font-size:13px;color:#344054;font-weight:600">Password Baru</label>
 <input type="password" name="newpass" placeholder="kosongkan jika tidak diubah" style="width:100%">
-<button>Simpan</button></form></div>`)
+<button style="margin-top:10px">Simpan</button></form></div>`)
 		return template.HTML(b.String())
 	})
 }
