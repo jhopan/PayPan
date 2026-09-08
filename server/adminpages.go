@@ -133,6 +133,7 @@ button.sec{background:#fff;color:#344054;border:1px solid #d0d5dd}button.sec:hov
 .badge{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .paid{background:#d4edda;color:#186a3b}.pending{background:#fff3cd;color:#8a6d00}
 .expired{background:#f8d7da;color:#8a1c1c}
+.pg{color:#1a7f37;text-decoration:none;font-weight:600;margin:0 6px}
 .money{font-variant-numeric:tabular-nums;text-align:right}
 .flash{background:#d4edda;color:#186a3b;padding:10px 14px;border-radius:8px;margin-bottom:14px}
 small{color:#667085}
@@ -145,6 +146,7 @@ form.inline{display:inline}
 <div class="menu">
 <a href="/admin" class="{{if eq .Tab "dash"}}on{{end}}"><span class="ico">▤</span> Dashboard</a>
 <a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}"><span class="ico">⧉</span> Aplikasi &amp; Token</a>
+<a href="/admin/log" class="{{if eq .Tab "log"}}on{{end}}"><span class="ico">☰</span> Log</a>
 <a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}"><span class="ico">⚙</span> Konfigurasi</a>
 </div>
 <div class="foot">v1.1 · jhopanstore</div>
@@ -440,14 +442,6 @@ var r=new FileReader();r.onload=function(){document.getElementById('imgdata').va
 <label style="font-size:13px;color:#344054">Password baru</label>
 <input type="password" name="newpass" placeholder="kosongkan jika tidak diubah" style="width:100%">
 <button>Simpan</button></form></div>`)
-		logs := s.recentAudit(12)
-		if len(logs) > 0 {
-			b.WriteString(`<div class="card"><h2>Audit log</h2><table><tr><th>Waktu</th><th>Oleh</th><th>Aksi</th><th>Detail</th></tr>`)
-			for _, l := range logs {
-				b.WriteString(`<tr><td>` + l["at"] + `</td><td>` + l["actor"] + `</td><td><code>` + l["action"] + `</code></td><td>` + l["detail"] + `</td></tr>`)
-			}
-			b.WriteString(`</table></div>`)
-		}
 		return template.HTML(b.String())
 	})
 }
