@@ -258,6 +258,10 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 400, map[string]string{"error": "price>0 wajib"})
 		return
 	}
+	if q.Price < 1000 {
+		s.writeJSON(w, 400, map[string]string{"error": "minimal Rp1.000 (3 digit terakhir dipakai sebagai kode unik 001-999)"})
+		return
+	}
 	if q.Price > 9_000_000 {
 		s.writeJSON(w, 400, map[string]string{"error": "price terlalu besar (max 9.000.000; kode 1-999)"})
 		return
