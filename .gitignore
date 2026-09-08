@@ -11,3 +11,4 @@ backup/
 
 # secrets
 *.secret
+.gradle/
