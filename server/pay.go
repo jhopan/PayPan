@@ -239,6 +239,20 @@ func (s *srv) handleOrderCreate(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
+	s.createOrder(w, r)
+}
+
+// handleOrderCreateSession: versi kasir — auth via session admin (dipanggil
+// setelah session diverifikasi oleh handler /api/kasir/order).
+func (s *srv) handleOrderCreateSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		s.writeJSON(w, 405, map[string]string{"error": "method"})
+		return
+	}
+	s.createOrder(w, r)
+}
+
+func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 	var q orderReq
 	if err := json.NewDecoder(r.Body).Decode(&q); err != nil || q.Price <= 0 {
 		s.writeJSON(w, 400, map[string]string{"error": "price>0 wajib"})

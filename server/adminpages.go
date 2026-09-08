@@ -153,6 +153,7 @@ form.inline{display:inline}
 <div class="brand"><div class="dot">P</div><div><b>Paypan</b><small>by JhopanStore</small></div></div>
 <div class="menu">
 <a href="/admin" class="{{if eq .Tab "dash"}}on{{end}}"><span class="ico">▤</span> Dashboard</a>
+<a href="/kasir" class="{{if eq .Tab "kasir"}}on{{end}}"><span class="ico">▣</span> Kasir</a>
 <a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}"><span class="ico">⧉</span> Aplikasi &amp; Token</a>
 <a href="/admin/log" class="{{if eq .Tab "log"}}on{{end}}"><span class="ico">☰</span> Log</a>
 <a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}"><span class="ico">⚙</span> Konfigurasi</a>

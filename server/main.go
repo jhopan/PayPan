@@ -65,23 +65,30 @@ func main() {
 			s.handleCheckout(w, r)
 		}
 	})
-	// kasir: buat tagihan cepat dari browser
+	// kasir: di dalam admin (bukan publik)
+	mux.HandleFunc("/kasir", s.handleKasir)
+	mux.HandleFunc("/api/kasir/order", func(w http.ResponseWriter, r *http.Request) {
+		// endpoint order khusus kasir: auth = session admin, bukan token
+		c, err := r.Cookie("paypan_session")
+		if err != nil || !sessions.valid(c.Value) {
+			s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+			return
+		}
+		// handleOrderCreate memeriksa scope token via authScope; untuk kasir
+		// (session), buat order langsung tanpa token check.
+		s.handleOrderCreateSession(w, r)
+	})
 	mux.HandleFunc("/qr/", func(w http.ResponseWriter, r *http.Request) {
-		// /qr/{id}.png -> sama dengan /pay/{id}/qr.png
+		// /qr/{id}.png -> butuh session admin juga
+		c, err := r.Cookie("paypan_session")
+		if err != nil || !sessions.valid(c.Value) {
+			http.NotFound(w, r)
+			return
+		}
 		p := strings.TrimPrefix(r.URL.Path, "/qr/")
 		p = strings.TrimSuffix(p, ".png")
 		r.URL.Path = "/pay/" + p + "/qr.png"
 		s.handleQR(w, r)
-	})
-	mux.HandleFunc("/static/", s.staticHandler)
-	mux.HandleFunc("/kasir", func(w http.ResponseWriter, r *http.Request) {
-		b, err := staticFS.ReadFile("static/kasir.html")
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(b)
 	})
 	// admin web
 	mux.HandleFunc("/admin/login", s.handleLogin)
