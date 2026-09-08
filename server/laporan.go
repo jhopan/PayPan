@@ -16,6 +16,14 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		actor := s.adminUser()
 		switch r.FormValue("act") {
+		case "del_tx":
+			id := r.FormValue("id")
+			if s.deleteTx(id) {
+				s.audit(actor, "tx.delete", id)
+				flash = "Transaksi " + id + " dihapus"
+			} else {
+				flash = "Gagal hapus (tidak ditemukan)"
+			}
 		case "purge_month":
 			month := r.FormValue("month") // format YYYY-MM
 			if len(month) == 7 && month[4] == '-' {
@@ -112,9 +120,10 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 
 	curMonth := time.Now().Format("2006-01")
 
-	// daftar transaksi paid terbaru (bisa difilter per bulan)
+	// daftar transaksi paid terbaru (bisa difilter per bulan) + sumber dari payments
 	filterMonth := r.URL.Query().Get("bulan")
-	listQ := `SELECT id,total,COALESCE(source,''),paid_at FROM orders WHERE status='paid'`
+	listQ := `SELECT o.id, o.total, COALESCE((SELECT p.source FROM payments p WHERE p.amount=o.total ORDER BY p.received_at DESC LIMIT 1),''), o.paid_at
+		FROM orders o WHERE o.status='paid'`
 	var listArgs []any
 	if filterMonth != "" && len(filterMonth) == 7 {
 		start, err := time.Parse("2006-01", filterMonth)
@@ -199,12 +208,12 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		})() + `" style="margin:0">
 <button class="sec">Filter</button>
 <a class="pg" href="/admin/laporan" style="margin-left:8px">Semua</a></form>
-<table><tr><th>Waktu dibayar</th><th>Sumber</th><th>ID Order</th><th class="money">Total</th></tr>`)
+<table><tr><th>Waktu dibayar</th><th>Sumber</th><th>ID Order</th><th class="money">Total</th><th>Aksi</th></tr>`)
 		if len(txs) == 0 {
-			b.WriteString(`<tr><td colspan="4" class="empty">Tidak ada transaksi lunas</td></tr>`)
+			b.WriteString(`<tr><td colspan="5" class="empty">Tidak ada transaksi lunas</td></tr>`)
 		}
 		for _, t := range txs {
-			b.WriteString(`<tr><td><small>` + timeFmt(t.PaidAt) + `</small></td><td>` + esc(t.Source) + `</td><td><code>` + t.ID + `</code></td><td class="money"><b>` + rp(t.Total) + `</b></td></tr>`)
+			b.WriteString(`<tr><td><small>` + timeFmt(t.PaidAt) + `</small></td><td>` + esc(t.Source) + `</td><td><code>` + t.ID + `</code></td><td class="money"><b>` + rp(t.Total) + `</b></td><td style="white-space:nowrap"><a class="pg" href="/admin/tx/` + t.ID + `">detail</a> <form method="post" class="inline" onsubmit="return confirm('Hapus transaksi ` + t.ID + `?')"><input type="hidden" name="act" value="del_tx"><input type="hidden" name="id" value="` + t.ID + `"><button class="del">Hapus</button></form></td></tr>`)
 		}
 		b.WriteString(`</table><small>Maks 50 transaksi terbaru.`)
 		if filterMonth != "" {
