@@ -74,7 +74,7 @@ button{width:100%;padding:11px;background:#1a7f37;color:#fff;border:0;border-rad
 button:hover{background:#166f30}
 .e{color:#b42318;font-size:14px;background:#fee4e2;padding:8px 12px;border-radius:8px;margin-bottom:10px}
 .hint{color:#667085;font-size:12px;margin-top:14px;text-align:center}</style></head><body><div class="c">
-<div class="logo"><div class="dot">P</div><div><b>Paypan Admin</b><small>Payment Gateway Console</small></div></div>
+<div class="logo"><div class="dot">P</div><div><b>Paypan Admin</b><small>by JhopanStore</small></div></div>
 {{if .}}<p class="e">{{.}}</p>{{end}}
 <form method="post">
 <label>Username</label><input type="text" name="user" placeholder="username" autofocus autocomplete="username">
@@ -150,14 +150,14 @@ form.inline{display:inline}
 </style></head><body>
 <div class="layout">
 <div class="sidebar">
-<div class="brand"><div class="dot">P</div><div><b>Paypan</b><small>payment gateway</small></div></div>
+<div class="brand"><div class="dot">P</div><div><b>Paypan</b><small>by JhopanStore</small></div></div>
 <div class="menu">
 <a href="/admin" class="{{if eq .Tab "dash"}}on{{end}}"><span class="ico">▤</span> Dashboard</a>
 <a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}"><span class="ico">⧉</span> Aplikasi &amp; Token</a>
 <a href="/admin/log" class="{{if eq .Tab "log"}}on{{end}}"><span class="ico">☰</span> Log</a>
 <a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}"><span class="ico">⚙</span> Konfigurasi</a>
 </div>
-<div class="foot">v1.1 · jhopanstore</div>
+<div class="foot">v1.1 · JhopanStore</div>
 </div>
 <div class="main">
 <header><h1>{{.Title}}</h1>

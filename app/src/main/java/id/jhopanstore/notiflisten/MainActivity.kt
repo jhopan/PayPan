@@ -102,6 +102,7 @@ class MainActivity : Activity() {
         for (r in db.recent(5)) {
             sb.append("- [${r.pkg}] ${r.title}: ${(r.text ?: "").take(40)}\n")
         }
+        sb.append("\nNotifListen-Payment v1.0 · JhopanStore")
         tvRecent.text = sb.toString()
     }
 }

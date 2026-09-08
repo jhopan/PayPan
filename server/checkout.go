@@ -107,6 +107,7 @@ h1{font-size:18px;margin:0 0 4px} .amount{font-size:32px;font-weight:700;margin:
 <div><img class="qr" id="qr" src="/pay/{{.ID}}/qr.png" alt="QRIS" {{if not .QR}}style="display:none"{{end}}></div>
 {{if .QR}}<small>Scan dengan aplikasi e-wallet / m-banking.<br>Halaman update otomatis.</small>
 {{else}}<small>QR tidak tersedia untuk order ini.</small>{{end}}
+<div style="margin-top:16px;font-size:11px;color:#98a2b3">Powered by <b>JhopanStore</b></div>
 </div>
 <script>
 (function poll(){

@@ -71,7 +71,11 @@ func (p *codePool) next(db *sql.DB) (int, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// reload used dari DB setiap kali (sumber kebenaran = DB)
-	rows, err := db.Query("SELECT code FROM orders WHERE status='pending'")
+	// skip kode yang: masih pending, ATAU baru expired/refunded < 24 jam
+	// (payment telat bisa datang setelah order expired — jangan pakai nominal yang sama lagi)
+	rows, err := db.Query(`SELECT code FROM orders WHERE status='pending'
+		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400)`)
 	if err != nil {
 		return 0, err
 	}
