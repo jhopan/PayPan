@@ -33,7 +33,7 @@ func main() {
 	// template QRIS statis: raw text payload, dibaca sekali saat start
 	qrisBytes, err := os.ReadFile("qris_base.txt")
 	if err != nil {
-		log.Fatal("qris_base.txt wajib ada di folder kerja server (raw text QRIS statis lo): ", err)
+		log.Fatal("qris_base.txt wajib ada di folder kerja server (raw text QRIS statis): ", err)
 	}
 	qrisBase := strings.TrimSpace(string(qrisBytes))
 	if !strings.Contains(qrisBase, "010211") || !strings.Contains(qrisBase, "5802ID") {
@@ -48,6 +48,8 @@ func main() {
 		tgChat:  *tgChat,
 		httpc:   &http.Client{Timeout: 10 * time.Second},
 	}
+	// token/chat Telegram dari web (settings) menimpa flag — selalu DB yang menang
+	s.loadTGFromDB()
 	_ = s.token // legacy: auth lewat authScope (tabel apps)
 
 	mux := http.NewServeMux()

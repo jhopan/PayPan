@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -179,7 +180,7 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 	case err == sql.ErrNoRows:
 		s.db.Exec("INSERT OR IGNORE INTO unmatched(payment_id,amount,reason,received_at) VALUES(?,?,?,?)",
 			n.ID, *n.Amount, "no pending order", now)
-		go s.notifyTG(fmt.Sprintf("⚠️ Notif tidak cocok: Rp%d (%s) — tidak ada order pending", *n.Amount, n.Source))
+		go s.notifyTGResult(fmt.Sprintf("⚠️ Notif tidak cocok: Rp%d (%s) — tidak ada order pending", *n.Amount, n.Source), n.ID)
 		s.writeJSON(w, 200, map[string]any{"ok": true, "matched": false})
 	case err != nil:
 		s.writeJSON(w, 500, map[string]string{"error": err.Error()})
@@ -192,7 +193,7 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 		}
 		var price, code int64
 		s.db.QueryRow("SELECT price,code FROM orders WHERE id=?", oid).Scan(&price, &code)
-		go s.notifyTG(fmt.Sprintf("✅ LUNAS Rp%d (order %s, kode %03d)", *n.Amount, oid, code))
+		go s.notifyTGResult(fmt.Sprintf("✅ LUNAS Rp%d (order %s, kode %03d)", *n.Amount, oid, code), oid)
 		go s.fireWebhooks(oid, *n.Amount)
 		s.writeJSON(w, 200, map[string]any{"ok": true, "matched": true, "order": oid})
 	}
@@ -284,17 +285,56 @@ func (s *srv) expireWorker() {
 	}
 }
 
-// notifyTG kirim pesan Telegram (opsional; diam kalau token kosong).
+// notifyTG kirim pesan Telegram ke semua chat terdaftar (dari DB, selalu fresh).
+// Gagal kirim dicatat ke audit — jangan diam-diam.
 func (s *srv) notifyTG(msg string) {
+	s.notifyTGResult(msg, "")
+}
+
+// notifyTGResult: sama, tapi link ke order untuk audit detail.
+func (s *srv) notifyTGResult(msg, orderID string) {
+	s.loadTGFromDB()
 	if s.tgToken == "" || s.tgChat == "" {
 		return
 	}
-	body, _ := json.Marshal(map[string]any{
-		"chat_id": s.tgChat, "text": msg,
-	})
-	req, _ := http.NewRequest("POST",
-		"https://api.telegram.org/bot"+s.tgToken+"/sendMessage",
-		strings.NewReader(string(body)))
-	req.Header.Set("Content-Type", "application/json")
-	s.httpc.Do(req)
+	for _, chat := range strings.Split(s.tgChat, ",") {
+		chat = strings.TrimSpace(chat)
+		if chat == "" {
+			continue
+		}
+		ok := false
+		for attempt := 0; attempt < 3; attempt++ {
+			body, _ := json.Marshal(map[string]any{"chat_id": chat, "text": msg})
+			req, err := http.NewRequest("POST",
+				"https://api.telegram.org/bot"+s.tgToken+"/sendMessage",
+				strings.NewReader(string(body)))
+			if err != nil {
+				break
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := s.httpc.Do(req)
+			if err != nil {
+				time.Sleep(3 * time.Second)
+				continue
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				ok = true
+				break
+			}
+			// 4xx = salah token/chat (tidak ada gunanya retry cepat), 5xx = coba lagi
+			if resp.StatusCode < 500 {
+				break
+			}
+			time.Sleep(3 * time.Second)
+		}
+		if !ok {
+			detail := "chat " + chat
+			if orderID != "" {
+				detail += " order " + orderID
+			}
+			s.audit("system", "telegram.gagal", detail+": "+msg)
+		}
+	}
 }
