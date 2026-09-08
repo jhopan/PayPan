@@ -136,6 +136,12 @@ button.sec{background:#fff;color:#344054;border:1px solid #d0d5dd}button.sec:hov
 .pg{color:#1a7f37;text-decoration:none;font-weight:600;margin:0 6px}
 .badge.scope{background:#eff8ff;color:#175cd3}
 code.tok:hover{background:#e4e7ec}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.stat{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 6px rgba(0,0,0,.06);text-align:center}
+.stat .n{font-size:26px;font-weight:800;color:#101828;font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:#667085;margin-top:2px}
+td small{color:#98a2b3;font-size:12px;white-space:nowrap}
+td.empty{text-align:center;color:#98a2b3;padding:18px}
 .money{font-variant-numeric:tabular-nums;text-align:right}
 .flash{background:#d4edda;color:#186a3b;padding:10px 14px;border-radius:8px;margin-bottom:14px}
 small{color:#667085}
@@ -188,28 +194,45 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	unm := s.recentUnmatched(8)
 
 	s.renderPage(w, "dash", "Dashboard", r.URL.Query().Get("m"), func() template.HTML {
-		// render inline string-builder: sederhana, tanpa template ganda
 		var b strings.Builder
-		b.WriteString(`<div class="card"><h2>Ringkasan</h2><table><tr><th>Order lunas</th><th>Pending</th><th>Expired</th><th>Notif diterima</th><th>Unmatched</th></tr><tr>`)
-		b.WriteString(`<td class="money">` + itoa(stats.Paid) + `</td><td class="money">` + itoa(stats.Pending) + `</td><td class="money">` + itoa(stats.Expired) + `</td><td class="money">` + itoa(stats.Pay) + `</td><td class="money">` + itoa(stats.Unmatch) + `</td></tr></table></div>`)
-		b.WriteString(`<div class="card"><h2>Order terakhir</h2><table><tr><th>ID</th><th>Status</th><th>Price</th><th>Total</th><th></th></tr>`)
+		// stat tiles: kartu kecil berjajar, bukan tabel
+		b.WriteString(`<div class="stats">
+<div class="stat"><div class="n">` + itoa(stats.Paid) + `</div><div class="l">Lunas</div></div>
+<div class="stat"><div class="n">` + itoa(stats.Pending) + `</div><div class="l">Pending</div></div>
+<div class="stat"><div class="n">` + itoa(stats.Expired) + `</div><div class="l">Expired</div></div>
+<div class="stat"><div class="n">` + itoa(stats.Pay) + `</div><div class="l">Notif diterima</div></div>
+<div class="stat"><div class="n">` + itoa(stats.Unmatch) + `</div><div class="l">Unmatched</div></div>
+</div>`)
+		// order terakhir: rapi + rupiah + waktu
+		b.WriteString(`<div class="card"><h2>Order terakhir</h2><table>
+<tr><th>Waktu</th><th>ID</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th></th></tr>`)
+		if len(orders) == 0 {
+			b.WriteString(`<tr><td colspan="6" class="empty">Belum ada order</td></tr>`)
+		}
 		for _, o := range orders {
-			b.WriteString(`<tr><td><code>` + o.ID + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + itoa64(o.Price) + `</td><td class="money">` + itoa64(o.Total) + `</td><td><a href="/admin/tx/` + o.ID + `" style="font-size:13px">detail →</a></td></tr>`)
+			t := o.CreatedAt
+			b.WriteString(`<tr><td><small>` + timeFmt(t) + `</small></td><td><code>` + o.ID + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + rp(o.Price) + `</td><td class="money"><b>` + rp(o.Total) + `</b></td><td><a class="pg" href="/admin/tx/` + o.ID + `">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
-		b.WriteString(`<div class="card"><h2>Notif terakhir</h2><table><tr><th>App</th><th>Judul</th><th>Amount</th></tr>`)
+		// notif terakhir
+		b.WriteString(`<div class="card"><h2>Notif terakhir</h2><table>
+<tr><th>Waktu</th><th>App</th><th>Judul</th><th class="money">Amount</th></tr>`)
+		if len(pays) == 0 {
+			b.WriteString(`<tr><td colspan="4" class="empty">Belum ada notif</td></tr>`)
+		}
 		for _, p := range pays {
 			amt := "—"
 			if p.Amount.Valid {
-				amt = itoa64(p.Amount.Int64)
+				amt = rp(p.Amount.Int64)
 			}
-			b.WriteString(`<tr><td><code>` + p.Pkg + `</code></td><td>` + p.Title + `</td><td class="money">` + amt + `</td></tr>`)
+			b.WriteString(`<tr><td><small>` + timeFmt(p.ReceivedAt) + `</small></td><td><code>` + p.Pkg + `</code></td><td>` + p.Title + `</td><td class="money">` + amt + `</td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
 		if len(unm) > 0 {
-			b.WriteString(`<div class="card"><h2>Unmatched</h2><table><tr><th>Amount</th><th>Alasan</th></tr>`)
+			b.WriteString(`<div class="card"><h2>Unmatched</h2><table>
+<tr><th>Waktu</th><th class="money">Amount</th><th>Alasan</th></tr>`)
 			for _, u := range unm {
-				b.WriteString(`<tr><td class="money">` + itoa64(u.Amount) + `</td><td>` + u.Reason + `</td></tr>`)
+				b.WriteString(`<tr><td><small>` + timeFmt(u.ReceivedAt) + `</small></td><td class="money">` + rp(u.Amount) + `</td><td>` + u.Reason + `</td></tr>`)
 			}
 			b.WriteString(`</table></div>`)
 		}

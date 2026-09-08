@@ -58,10 +58,18 @@ func (s *srv) handleAdminLog(w http.ResponseWriter, r *http.Request) {
 		sb.WriteString(`<div class="card"><h2>Audit Log</h2>
 <table><tr><th>Waktu</th><th>Oleh</th><th>Aksi</th><th>Detail</th></tr>`)
 		if len(logs) == 0 {
-			sb.WriteString(`<tr><td colspan="4">Belum ada aktivitas</td></tr>`)
+			sb.WriteString(`<tr><td colspan="4" class="empty">Belum ada aktivitas</td></tr>`)
 		}
 		for _, l := range logs {
-			sb.WriteString(`<tr><td>` + l["at"] + `</td><td>` + l["actor"] + `</td><td><code>` + l["action"] + `</code></td><td>` + l["detail"] + `</td></tr>`)
+			act := l["action"]
+			cls := "badge scope"
+			switch {
+			case strings.Contains(act, "gagal"):
+				cls = "badge expired"
+			case strings.Contains(act, "login"):
+				cls = "badge pending"
+			}
+			sb.WriteString(`<tr><td><small>` + l["at"] + `</small></td><td>` + l["actor"] + `</td><td><span class="` + cls + `">` + act + `</span></td><td>` + l["detail"] + `</td></tr>`)
 		}
 		sb.WriteString(`</table><div style="margin-top:10px">`)
 		if page > 1 {

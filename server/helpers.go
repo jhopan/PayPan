@@ -14,25 +14,28 @@ func fmt_Sscan(s string, v *int64) { fmt.Sscan(s, v) }
 func os_WriteFile(p string, d []byte, m os.FileMode) { os.WriteFile(p, d, m) }
 
 type orderLite struct {
-	ID     string
-	Status string
-	Price  int64
-	Total  int64
+	ID        string
+	Status    string
+	Price     int64
+	Total     int64
+	CreatedAt int64
 }
 
 type payLite struct {
-	Pkg    string
-	Title  string
-	Amount sql.NullInt64
+	Pkg        string
+	Title      string
+	Amount     sql.NullInt64
+	ReceivedAt int64
 }
 
 type unmatchLite struct {
-	Amount int64
-	Reason string
+	Amount     int64
+	Reason     string
+	ReceivedAt int64
 }
 
 func (s *srv) recentOrders(n int) []orderLite {
-	rows, err := s.db.Query("SELECT id,status,price,total FROM orders ORDER BY created_at DESC LIMIT ?", n)
+	rows, err := s.db.Query("SELECT id,status,price,total,created_at FROM orders ORDER BY created_at DESC LIMIT ?", n)
 	if err != nil {
 		return nil
 	}
@@ -40,7 +43,7 @@ func (s *srv) recentOrders(n int) []orderLite {
 	var out []orderLite
 	for rows.Next() {
 		var o orderLite
-		if rows.Scan(&o.ID, &o.Status, &o.Price, &o.Total) == nil {
+		if rows.Scan(&o.ID, &o.Status, &o.Price, &o.Total, &o.CreatedAt) == nil {
 			out = append(out, o)
 		}
 	}
@@ -48,7 +51,7 @@ func (s *srv) recentOrders(n int) []orderLite {
 }
 
 func (s *srv) recentPayments(n int) []payLite {
-	rows, err := s.db.Query("SELECT pkg,title,amount FROM payments ORDER BY received_at DESC LIMIT ?", n)
+	rows, err := s.db.Query("SELECT pkg,title,amount,received_at FROM payments ORDER BY received_at DESC LIMIT ?", n)
 	if err != nil {
 		return nil
 	}
@@ -56,7 +59,7 @@ func (s *srv) recentPayments(n int) []payLite {
 	var out []payLite
 	for rows.Next() {
 		var p payLite
-		if rows.Scan(&p.Pkg, &p.Title, &p.Amount) == nil {
+		if rows.Scan(&p.Pkg, &p.Title, &p.Amount, &p.ReceivedAt) == nil {
 			out = append(out, p)
 		}
 	}
@@ -64,7 +67,7 @@ func (s *srv) recentPayments(n int) []payLite {
 }
 
 func (s *srv) recentUnmatched(n int) []unmatchLite {
-	rows, err := s.db.Query("SELECT amount,reason FROM unmatched ORDER BY received_at DESC LIMIT ?", n)
+	rows, err := s.db.Query("SELECT amount,reason,received_at FROM unmatched ORDER BY received_at DESC LIMIT ?", n)
 	if err != nil {
 		return nil
 	}
@@ -72,11 +75,26 @@ func (s *srv) recentUnmatched(n int) []unmatchLite {
 	var out []unmatchLite
 	for rows.Next() {
 		var u unmatchLite
-		if rows.Scan(&u.Amount, &u.Reason) == nil {
+		if rows.Scan(&u.Amount, &u.Reason, &u.ReceivedAt) == nil {
 			out = append(out, u)
 		}
 	}
 	return out
+}
+
+// rp: format rupiah ringkas: 17500 -> "17.500"
+func rp(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	if len(s) <= 3 {
+		return s
+	}
+	var out []string
+	for len(s) > 3 {
+		out = append([]string{s[len(s)-3:]}, out...)
+		s = s[:len(s)-3]
+	}
+	out = append([]string{s}, out...)
+	return strings.Join(out, ".")
 }
 
 // readQrisBase: prioritas DB (diset via web), fallback file qris_base.txt.
