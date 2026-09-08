@@ -1,13 +1,14 @@
 package main
 
 import (
+	crand "crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -94,7 +95,9 @@ func (p *codePool) next(db *sql.DB) (int, error) {
 	if len(free) == 0 {
 		return 0, fmt.Errorf("pool kode habis (999 order pending)")
 	}
-	return free[rand.Intn(len(free))], nil
+	// berurutan dari kecil: 001, 002, ... — mudah dibaca, bukan acak
+	sort.Ints(free)
+	return free[0], nil
 }
 
 // ---------- handlers ----------
@@ -173,9 +176,7 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 	// 2. match exact: order pending dengan total = amount, belum expired
 	now := time.Now().Unix()
 	var oid string
-	err = s.db.QueryRow(
-		"SELECT id FROM orders WHERE status='pending' AND total=? AND expires_at>? LIMIT 1",
-		*n.Amount, now).Scan(&oid)
+	oid, err = s.matchPending(*n.Amount, now)
 	switch {
 	case err == sql.ErrNoRows:
 		s.db.Exec("INSERT OR IGNORE INTO unmatched(payment_id,amount,reason,received_at) VALUES(?,?,?,?)",
@@ -185,10 +186,18 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.writeJSON(w, 500, map[string]string{"error": err.Error()})
 	default:
-		_, err = s.db.Exec("UPDATE orders SET status='paid', paid_at=? WHERE id=? AND status='pending'",
+		// UPDATE ... WHERE status='pending': kalau order sudah dibayar/proses lain
+		// di antara SELECT dan UPDATE, rowsAffected=0 -> payment masuk unmatched, bukan dobel-match.
+		res, err := s.db.Exec("UPDATE orders SET status='paid', paid_at=? WHERE id=? AND status='pending'",
 			now, oid)
 		if err != nil {
 			s.writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		if affected, _ := res.RowsAffected(); affected == 0 {
+			s.db.Exec("INSERT OR IGNORE INTO unmatched(payment_id,amount,reason,received_at) VALUES(?,?,?,?)",
+				n.ID, *n.Amount, "order sudah diproses", now)
+			s.writeJSON(w, 200, map[string]any{"ok": true, "matched": false, "reason": "already processed"})
 			return
 		}
 		var price, code int64
@@ -232,7 +241,7 @@ func (s *srv) handleOrderCreate(w http.ResponseWriter, r *http.Request) {
 	total := q.Price + int64(code)
 	oid := newOrderID()
 	now := time.Now().Unix()
-	exp := now + 15*60 // 15 menit
+	exp := now + 5*60 // 5 menit window pembayaran
 	if _, err := s.db.Exec(
 		"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
 		oid, q.Price, code, total, now, exp); err != nil {
@@ -253,8 +262,21 @@ func (s *srv) handleOrderCreate(w http.ResponseWriter, r *http.Request) {
 // newOrderID: 8 byte random hex — cukup unik, tanpa dep.
 func newOrderID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	crand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// matchPending: cari order pending dengan total = amount, belum expired.
+// Jika ada LEBIH dari satu order pending dengan nominal sama (misal dua order
+// Rp 1.000+kode yang sama — tidak mungkin dengan pool unik, tapi pengaman):
+// pilih yang PALING BARU dibuat. Order yang sudah paid/expired tidak akan
+// pernah dicocokkan lagi — satu pembayaran hanya pernah match satu order.
+func (s *srv) matchPending(amount int64, now int64) (string, error) {
+	var oid string
+	err := s.db.QueryRow(
+		"SELECT id FROM orders WHERE status='pending' AND total=? AND expires_at>? ORDER BY created_at DESC LIMIT 1",
+		amount, now).Scan(&oid)
+	return oid, err
 }
 
 // GET /api/order/{id} — status (polling dari checkout/bot).
@@ -278,9 +300,9 @@ func (s *srv) handleOrderStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// expireWorker: tandai order pending lewat 15 menit sebagai expired.
+// expireWorker: tandai order pending lewat window sebagai expired (kode balik ke pool).
 func (s *srv) expireWorker() {
-	for range time.Tick(30 * time.Second) {
+	for range time.Tick(10 * time.Second) {
 		s.db.Exec("UPDATE orders SET status='expired' WHERE status='pending' AND expires_at<strftime('%s','now')")
 	}
 }
