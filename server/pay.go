@@ -101,6 +101,42 @@ func pickCode(db *sql.DB, price int64) (int, bool) {
 	return 0, false
 }
 
+// pickCodeTx: sama dengan pickCode tapi di dalam transaksi aktif (atomic claim).
+func pickCodeTx(tx *sql.Tx, price int64) (int, bool) {
+	for c := 1; c <= 999; c++ {
+		if codeUsedInPriceTx(tx, price, c) {
+			continue
+		}
+		if totalClaimedTx(tx, price+int64(c)) {
+			continue
+		}
+		return c, true
+	}
+	return 0, false
+}
+
+// ---- versi Tx dari helper klaim (dipakai di dalam transaksi IMMEDIATE) ----
+
+func totalClaimedTx(tx *sql.Tx, total int64) bool {
+	var n int
+	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
+		status='pending'
+		OR status='paid'
+		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, total).Scan(&n)
+	return n > 0
+}
+
+func codeUsedInPriceTx(tx *sql.Tx, price int64, code int) bool {
+	var n int
+	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
+		status='pending'
+		OR status='paid'
+		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price, code).Scan(&n)
+	return n > 0
+}
+
 // ---------- handlers ----------
 
 type srv struct {
@@ -264,32 +300,43 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// klaim total eksklusif: mulai 001, geser kalau total/kode sudah di-klaim.
-	// INSERT bisa kena UNIQUE (race) -> retry dengan kode berikutnya.
+	// klaim total eksklusif: TRANSAKSI IMMEDIATE — cek & insert atomic.
+	// Dua request paralel: yang pertama kunci DB, cek, insert, commit; yang
+	// kedua masuk setelahnya dan lihat total sudah di-klaim -> geser kode.
 	var oid string
 	var code int
 	var total int64
 	now := time.Now().Unix()
 	exp := now + 5*60 // 5 menit window pembayaran
 	claimed := false
-	for attempt := 0; attempt < 20; attempt++ {
-		c, ok := pickCode(s.db, q.Price)
+	for attempt := 0; attempt < 30; attempt++ {
+		tx, err := s.db.Begin() // modernc/sqlite single-writer: ini serialize klaim
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		c, ok := pickCodeTx(tx, q.Price)
 		if !ok {
+			tx.Rollback()
 			break
 		}
 		code = c
 		total = q.Price + int64(code)
 		oid = newOrderID()
-		res, err := s.db.Exec(
+		res, err := tx.Exec(
 			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
 			oid, q.Price, code, total, now, exp)
 		if err != nil {
-			continue // race: total baru saja diklaim proses lain -> coba kode berikutnya
+			tx.Rollback()
+			continue
 		}
 		if n, _ := res.RowsAffected(); n == 1 {
-			claimed = true
-			break
+			if err := tx.Commit(); err == nil {
+				claimed = true
+				break
+			}
 		}
+		tx.Rollback()
 	}
 	if !claimed {
 		s.writeJSON(w, 503, map[string]string{"error": "semua kode sedang dipakai order aktif, coba beberapa saat lagi"})
