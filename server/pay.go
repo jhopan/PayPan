@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -52,85 +51,54 @@ func buildDynamicQR(base string, total int64) (string, error) {
 }
 
 // ---------- kode unik 001-999 per level harga ----------
+//
+// DESAIN "KLAIM TOTAL EKSKLUSIF" (reliable di semua kondisi):
+// Invariant tunggal: SATU TOTAL AKTIF HANYA UNTUK SATU ORDER.
+// - Partial UNIQUE index di DB: total harus unik di antara order status='pending'.
+//   Ini di-enforce oleh SQLite sendiri — dua order dibuat bareng pun, satu pasti gagal insert.
+// - Pemilihan kode: mulai 001, cek total (price+code) sudah di-klaim order aktif lain?
+//   Ya -> geser ke 002, 003, ... sampai bebas. Level = price, tapi anti-bentrok
+//   antar level otomatis (contoh: 1000+999=1999 vs 1100+899=1999 — salah satu digeser).
+// - Klaim atomik: INSERT langsung mencoba klaim; kalau kena UNIQUE (race),
+//   coba kode berikutnya (maks 20x). Tanpa mutex global, tanpa doa.
 
-// Kode unik = 3 digit terakhir yang menjadikan total unik.
-// Aturan (per desain user):
-//   price 1000 -> 1001, 1002, ... (level 1000)
-//   price 2000 -> 2001, 2002, ... (level 2000 — urutan sendiri)
-//   price 1500 -> 1501, 1502, ...
-// Level = price. Kode dipilih per-price: kode yang belum dipakai order aktif
-// dengan price yang sama, diurut dari kecil.
-// Anti-bentrok antar level: total (price+code) tidak boleh sama dengan total
-// order aktif lain (contoh bentrok: 1000+999=1999 vs 1100+899=1999).
-
-// kode harus unik di antara SEMUA order pending, bukan hanya harga sama.
-type codePool struct {
-	mu    sync.Mutex
-	used  map[int]bool
-	shuf  []int
-	uidx  int
-}
-
-func newCodePool() *codePool {
-	return &codePool{used: make(map[int]bool)}
-}
-
-// next: ambil kode bebas utk price tertentu.
-func (p *codePool) next(db *sql.DB, price int64) (int, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	// 1. kode yang sudah dipakai order AKTIF dengan price sama
-	rows, err := db.Query(`SELECT code FROM orders WHERE
-		price=? AND (
+// totalClaimed: true kalau total sudah dipakai order AKTIF (pending / paid / expired<24h / refunded<24h).
+// Paid tidak boleh dipakai ulang (kode monoten naik). Expired/refunded cooldown 24 jam.
+func totalClaimed(db *sql.DB, total int64) bool {
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
 		OR status='paid'
 		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price)
-	if err != nil {
-		return 0, err
-	}
-	used := make(map[int]bool)
-	for rows.Next() {
-		var c int
-		if err := rows.Scan(&c); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		used[c] = true
-	}
-	rows.Close()
-	// 2. total yang sudah dipakai order AKTIF level lain (anti-bentrok total)
-	usedTotal := make(map[int64]bool)
-	rows2, err := db.Query(`SELECT total FROM orders WHERE
-		price != ? AND (
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, total).Scan(&n)
+	return n > 0
+}
+
+// codeUsedInPrice: kode sudah dipakai order aktif dengan price sama?
+// (agar urutan per level mulus: 1000->001,002... tidak lompat tanpa alasan)
+func codeUsedInPrice(db *sql.DB, price int64, code int) bool {
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
 		OR status='paid'
 		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price)
-	if err != nil {
-		return 0, err
-	}
-	for rows2.Next() {
-		var t int64
-		if err := rows2.Scan(&t); err != nil {
-			rows2.Close()
-			return 0, err
-		}
-		usedTotal[t] = true
-	}
-	rows2.Close()
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price, code).Scan(&n)
+	return n > 0
+}
 
+// pickCode: cari kode bebas untuk price: mulai 001, skip yang dipakai di level
+// yang sama atau yang totalnya bentrok dengan level lain. Kembalikan kandidat pertama.
+func pickCode(db *sql.DB, price int64) (int, bool) {
 	for c := 1; c <= 999; c++ {
-		if used[c] {
-			continue // kode sudah dipakai di level ini
+		if codeUsedInPrice(db, price, c) {
+			continue
 		}
-		total := price + int64(c)
-		if usedTotal[total] {
-			continue // total bentrok dengan level lain yang aktif
+		if totalClaimed(db, price+int64(c)) {
+			continue
 		}
-		return c, nil
+		return c, true
 	}
-	return 0, fmt.Errorf("pool kode habis utk price %d (999 order aktif dengan harga sama)", price)
+	return 0, false
 }
 
 // ---------- handlers ----------
@@ -296,19 +264,35 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := newCodePool().next(s.db, q.Price)
-	if err != nil {
-		s.writeJSON(w, 503, map[string]string{"error": err.Error()})
-		return
-	}
-	total := q.Price + int64(code)
-	oid := newOrderID()
+	// klaim total eksklusif: mulai 001, geser kalau total/kode sudah di-klaim.
+	// INSERT bisa kena UNIQUE (race) -> retry dengan kode berikutnya.
+	var oid string
+	var code int
+	var total int64
 	now := time.Now().Unix()
 	exp := now + 5*60 // 5 menit window pembayaran
-	if _, err := s.db.Exec(
-		"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
-		oid, q.Price, code, total, now, exp); err != nil {
-		s.writeJSON(w, 500, map[string]string{"error": err.Error()})
+	claimed := false
+	for attempt := 0; attempt < 20; attempt++ {
+		c, ok := pickCode(s.db, q.Price)
+		if !ok {
+			break
+		}
+		code = c
+		total = q.Price + int64(code)
+		oid = newOrderID()
+		res, err := s.db.Exec(
+			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
+			oid, q.Price, code, total, now, exp)
+		if err != nil {
+			continue // race: total baru saja diklaim proses lain -> coba kode berikutnya
+		}
+		if n, _ := res.RowsAffected(); n == 1 {
+			claimed = true
+			break
+		}
+	}
+	if !claimed {
+		s.writeJSON(w, 503, map[string]string{"error": "semua kode sedang dipakai order aktif, coba beberapa saat lagi"})
 		return
 	}
 	qrData, err := buildDynamicQR(s.qris, total)

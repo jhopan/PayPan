@@ -19,6 +19,11 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX IF NOT EXISTS idx_orders_status_total ON orders(status, total);
 CREATE INDEX IF NOT EXISTS idx_orders_expires ON orders(status, expires_at);
 
+-- KLAIM TOTAL EKSKLUSIF: satu total hanya boleh dimiliki SATU order pending.
+-- SQLite enforce ini di level storage — dua INSERT bareng, salah satu pasti gagal.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_pending_total
+	ON orders(total) WHERE status='pending';
+
 CREATE TABLE IF NOT EXISTS payments (
 	id TEXT PRIMARY KEY,
 	pkg TEXT,
