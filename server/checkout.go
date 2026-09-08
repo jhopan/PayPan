@@ -30,32 +30,30 @@ func (s *srv) handleCheckout(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	data, err := os.ReadFile("qris_base.txt")
-	if err != nil {
-		if os.IsNotExist(err) {
-			http.Error(w, "qris_base.txt belum diset (scan QR statis lo, simpan raw text)", 500)
-		} else {
-			http.Error(w, "baca qris_base.txt: "+err.Error(), 500)
+	// QR dinamis hanya untuk order yang masih pending; sisanya tanpa QR
+	qrData := ""
+	if status == "pending" {
+		data, err := os.ReadFile("qris_base.txt")
+		if err != nil {
+			http.Error(w, "qris_base.txt belum diset (Konfigurasi → QRIS)", 500)
+			return
 		}
-		return
-	}
-	qrData, err := buildDynamicQR(strings.TrimSpace(string(data)), total)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-	png, err := qrcode.Encode(qrData, qrcode.Medium, 512)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		qrData, err = buildDynamicQR(strings.TrimSpace(string(data)), total)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		_, err = qrcode.Encode(qrData, qrcode.Medium, 512)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
 	}
 	tmpl, _ := template.New("p").Parse(checkoutHTML)
-	tmpl.Execute(w, map[string]any{"ID": id, "Status": status, "Total": total})
-	_ = png
-	_ = checkoutStaticFS
+	tmpl.Execute(w, map[string]any{"ID": id, "Status": status, "Total": total, "QR": qrData != ""})
 }
 
-// GET /pay/{id}/qr.png — gambar QR dinamis per order.
+// GET /pay/{id}/qr.png — gambar QR dinamis per order (pending saja).
 func (s *srv) handleQR(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/pay/"), "/qr.png")
 	var status string
@@ -63,6 +61,10 @@ func (s *srv) handleQR(w http.ResponseWriter, r *http.Request) {
 	err := s.db.QueryRow("SELECT status,total FROM orders WHERE id=?", id).Scan(&status, &total)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	if status != "pending" {
+		http.Error(w, "QR tidak tersedia", 404)
 		return
 	}
 	data, err := os.ReadFile("qris_base.txt")
@@ -102,8 +104,9 @@ h1{font-size:18px;margin:0 0 4px} .amount{font-size:32px;font-weight:700;margin:
 <h1>Pembayaran QRIS</h1>
 <div class="amount">Rp {{.Total}}</div>
 <span class="badge {{.Status}}" id="badge">{{if eq .Status "paid"}}LUNAS{{else if eq .Status "expired"}}KADALUARSA{{else}}MENUNGGU PEMBAYARAN{{end}}</span>
-<div><img class="qr" id="qr" src="/pay/{{.ID}}/qr.png" alt="QRIS"></div>
-<small>Scan dengan aplikasi e-wallet / m-banking.<br>Halaman update otomatis.</small>
+<div><img class="qr" id="qr" src="/pay/{{.ID}}/qr.png" alt="QRIS" {{if not .QR}}style="display:none"{{end}}></div>
+{{if .QR}}<small>Scan dengan aplikasi e-wallet / m-banking.<br>Halaman update otomatis.</small>
+{{else}}<small>QR tidak tersedia untuk order ini.</small>{{end}}
 </div>
 <script>
 (function poll(){

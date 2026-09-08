@@ -1,0 +1,103 @@
+package main
+
+import (
+	"net/http"
+	"sync"
+	"time"
+)
+
+// ---------- rate limit login (per IP) ----------
+
+type loginLimit struct {
+	mu      sync.Mutex
+	attempt map[string][]time.Time
+}
+
+var limiter = &loginLimit{attempt: map[string][]time.Time{}}
+
+const (
+	llWindow = 10 * time.Minute
+	llMax    = 5
+)
+
+// allow: true kalau IP belum melewati batas
+func (l *loginLimit) allow(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	keep := l.attempt[ip][:0]
+	for _, t := range l.attempt[ip] {
+		if now.Sub(t) < llWindow {
+			keep = append(keep, t)
+		}
+	}
+	l.attempt[ip] = keep
+	return len(keep) < llMax
+}
+
+func (l *loginLimit) hit(ip string) {
+	l.mu.Lock()
+	l.attempt[ip] = append(l.attempt[ip], time.Now())
+	l.mu.Unlock()
+}
+
+func (l *loginLimit) reset(ip string) {
+	l.mu.Lock()
+	delete(l.attempt, ip)
+	l.mu.Unlock()
+}
+
+func clientIP(r *http.Request) string {
+	// CF tunnel: X-Forwarded-For ; direct: RemoteAddr
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return xff
+	}
+	host := r.RemoteAddr
+	for i := len(host) - 1; i >= 0; i-- {
+		if host[i] == ':' {
+			return host[:i]
+		}
+	}
+	return host
+}
+
+// ---------- security headers middleware ----------
+
+func secureHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// ---------- audit log ----------
+
+func (s *srv) audit(actor, action, detail string) {
+	s.db.Exec("INSERT INTO audit(at,actor,action,detail) VALUES(strftime('%s','now'),?,?,?)",
+		actor, action, detail)
+}
+
+func (s *srv) recentAudit(n int) []map[string]string {
+	rows, err := s.db.Query("SELECT at,actor,action,IFNULL(detail,'') FROM audit ORDER BY id DESC LIMIT ?", n)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []map[string]string
+	for rows.Next() {
+		var at int64
+		var actor, action, detail string
+		rows.Scan(&at, &actor, &action, &detail)
+		out = append(out, map[string]string{
+			"at":     time.Unix(at, 0).Format("02 Jan 15:04"),
+			"actor":  actor,
+			"action": action,
+			"detail": detail,
+		})
+	}
+	return out
+}

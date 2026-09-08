@@ -193,6 +193,7 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 		var price, code int64
 		s.db.QueryRow("SELECT price,code FROM orders WHERE id=?", oid).Scan(&price, &code)
 		go s.notifyTG(fmt.Sprintf("✅ LUNAS Rp%d (order %s, kode %03d)", *n.Amount, oid, code))
+		go s.fireWebhooks(oid, *n.Amount)
 		s.writeJSON(w, 200, map[string]any{"ok": true, "matched": true, "order": oid})
 	}
 }

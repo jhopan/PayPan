@@ -69,6 +69,7 @@ func main() {
 	mux.HandleFunc("/admin/logout", s.handleLogout)
 	mux.HandleFunc("/admin/apps", s.handleAdminApps)
 	mux.HandleFunc("/admin/config", s.handleAdminConfig)
+	mux.HandleFunc("/admin/tx/", s.handleTxDetail)
 	mux.HandleFunc("/admin", s.handleAdminHome)
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", 302)
@@ -83,5 +84,5 @@ func main() {
 
 	go s.expireWorker()
 	log.Printf("Paypan server listening %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	log.Fatal(http.ListenAndServe(*addr, secureHeaders(mux)))
 }

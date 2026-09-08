@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 func itoa(n int) string       { return strconv.Itoa(n) }
@@ -78,12 +79,25 @@ func (s *srv) recentUnmatched(n int) []unmatchLite {
 	return out
 }
 
-func (s *srv) readQris() string {
+// readQrisBase: prioritas DB (diset via web), fallback file qris_base.txt.
+func (s *srv) readQrisBase() string {
+	var q string
+	s.db.QueryRow("SELECT value FROM settings WHERE key='qris_base'").Scan(&q)
+	if q != "" {
+		return q
+	}
 	b, err := os.ReadFile("qris_base.txt")
 	if err != nil {
 		return ""
 	}
-	return string(b)
+	return strings.TrimSpace(string(b))
+}
+
+// qrisImageBase64: gambar QRIS statis yang diupload admin (PNG/JPG base64) — tampil di checkout.
+func (s *srv) qrisImageBase64() string {
+	var q string
+	s.db.QueryRow("SELECT value FROM settings WHERE key='qris_image'").Scan(&q)
+	return q
 }
 
 // loadTGFromDB: baca pengaturan telegram dari tabel settings (set via web)

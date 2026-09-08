@@ -4,6 +4,7 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -29,19 +30,34 @@ func (s *srv) staticHandler(w http.ResponseWriter, r *http.Request) {
 func (s *srv) handleLogin(w http.ResponseWriter, r *http.Request) {
 	msg := ""
 	if r.Method == http.MethodPost {
+		ip := clientIP(r)
+		if !limiter.allow(ip) {
+			msg = "Terlalu banyak percobaan. Coba lagi dalam 10 menit."
+			tmpl, _ := template.New("l").Parse(loginHTML())
+			tmpl.Execute(w, msg)
+			return
+		}
 		r.ParseForm()
 		if r.FormValue("user") == s.adminUser() && r.FormValue("pass") == s.adminPass() {
+			limiter.reset(ip)
 			tok := sessions.newSession()
 			http.SetCookie(w, &http.Cookie{
 				Name: "paypan_session", Value: tok, Path: "/",
 				HttpOnly: true, SameSite: http.SameSiteLaxMode,
 			})
+			s.audit(s.adminUser(), "admin.login", "ip "+ip)
 			http.Redirect(w, r, "/admin", 302)
 			return
 		}
-		msg = "Password salah"
+		limiter.hit(ip)
+		s.audit("anon", "login.gagal", "ip "+ip)
+		msg = "Username atau password salah"
 	}
-	tmpl, _ := template.New("l").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
+	tmpl, _ := template.New("l").Parse(loginHTML())
+	tmpl.Execute(w, msg)
+}
+
+func loginHTML() string { return `<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — Paypan</title>
 <style>body{font-family:system-ui;background:#f2f4f8;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
 .c{background:#fff;padding:36px;border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.09);width:340px}
@@ -62,9 +78,8 @@ button:hover{background:#166f30}
 <label>Password</label><input type="password" name="pass" placeholder="password" autocomplete="current-password">
 <button>Login</button>
 </form>
-<div class="hint">Akses terbatas — dilarang dibagikan</div></div></body></html>`)
-	tmpl.Execute(w, msg)
-}
+<div class="hint">Akses terbatas — dilarang dibagikan</div></div></body></html>` }
+
 
 func (s *srv) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("paypan_session"); err == nil {
@@ -129,7 +144,7 @@ form.inline{display:inline}
 <a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}"><span class="ico">⧉</span> Aplikasi &amp; Token</a>
 <a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}"><span class="ico">⚙</span> Konfigurasi</a>
 </div>
-<div class="foot">v1.0 · jhopanstore</div>
+<div class="foot">v1.1 · jhopanstore</div>
 </div>
 <div class="main">
 <header><h1>{{.Title}}</h1>
@@ -170,9 +185,9 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Ringkasan</h2><table><tr><th>Order lunas</th><th>Pending</th><th>Expired</th><th>Notif diterima</th><th>Unmatched</th></tr><tr>`)
 		b.WriteString(`<td class="money">` + itoa(stats.Paid) + `</td><td class="money">` + itoa(stats.Pending) + `</td><td class="money">` + itoa(stats.Expired) + `</td><td class="money">` + itoa(stats.Pay) + `</td><td class="money">` + itoa(stats.Unmatch) + `</td></tr></table></div>`)
-		b.WriteString(`<div class="card"><h2>Order terakhir</h2><table><tr><th>ID</th><th>Status</th><th>Price</th><th>Total</th></tr>`)
+		b.WriteString(`<div class="card"><h2>Order terakhir</h2><table><tr><th>ID</th><th>Status</th><th>Price</th><th>Total</th><th></th></tr>`)
 		for _, o := range orders {
-			b.WriteString(`<tr><td><code>` + o.ID + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + itoa64(o.Price) + `</td><td class="money">` + itoa64(o.Total) + `</td></tr>`)
+			b.WriteString(`<tr><td><code>` + o.ID + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + itoa64(o.Price) + `</td><td class="money">` + itoa64(o.Total) + `</td><td><a href="/admin/tx/` + o.ID + `" style="font-size:13px">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
 		b.WriteString(`<div class="card"><h2>Notif terakhir</h2><table><tr><th>App</th><th>Judul</th><th>Amount</th></tr>`)
@@ -259,49 +274,131 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 	flash := ""
 	if r.Method == http.MethodPost {
 		r.ParseForm()
+		actor := s.adminUser()
 		switch r.FormValue("act") {
 		case "qris":
 			q := strings.TrimSpace(r.FormValue("qris"))
 			if strings.Contains(q, "010211") && strings.Contains(q, "5802ID") && strings.Contains(q, "6304") {
-				os_WriteFile("qris_base.txt", []byte(q), 0600)
+				s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_base',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", q)
+				os.WriteFile("qris_base.txt", []byte(q), 0600) // fallback lokal
+				s.audit(actor, "qris.update", "payload "+itoa(len(q))+" char")
 				flash = "QRIS statis tersimpan"
 			} else {
 				flash = "Payload tidak dikenali (butuh 010211, 5802ID, 6304)"
 			}
+		case "qrisimg":
+			// upload gambar QRIS: base64 data URL dari <input type=file> dibaca JS
+			img := strings.TrimSpace(r.FormValue("img"))
+			if strings.HasPrefix(img, "data:image/png;base64,") || strings.HasPrefix(img, "data:image/jpeg;base64,") {
+				if len(img) > 700_000 {
+					flash = "Gambar terlalu besar (max ~500KB)"
+				} else {
+					s.db.Exec("INSERT INTO settings(key,value) VALUES('qris_image',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", img)
+					s.audit(actor, "qris.image", "ganti gambar QRIS")
+					flash = "Gambar QRIS tersimpan"
+				}
+			} else {
+				flash = "Format harus PNG/JPG"
+			}
+		case "qrisimg_del":
+			s.db.Exec("DELETE FROM settings WHERE key='qris_image'")
+			flash = "Gambar QRIS dihapus"
 		case "pass":
 			np := r.FormValue("newpass")
 			nu := strings.TrimSpace(r.FormValue("newuser"))
-			if nu != "" {
+			if nu != "" && nu != actor {
 				s.setAdminUser(nu)
+				s.audit(actor, "admin.user", "username -> "+nu)
+				actor = nu
 			}
 			if np != "" {
 				if len(np) >= 6 {
 					s.setAdminPass(np)
+					s.audit(actor, "admin.pass", "password diganti")
 					flash = "Login admin diperbarui"
 				} else {
-					flash = "Password minimal 6 karakter (username tetap diganti)"
+					flash = "Password minimal 6 karakter"
 				}
-			} else {
+			} else if nu != "" && nu != actor {
 				flash = "Username diganti"
 			}
+		case "wh_add":
+			u := strings.TrimSpace(r.FormValue("url"))
+			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+				s.db.Exec("INSERT INTO webhooks(app_rowid,url,active,created_at) VALUES((SELECT COALESCE(MAX(rowid),0) FROM apps),?,1,strftime('%s','now'))", u)
+				s.audit(actor, "webhook.add", u)
+				flash = "Webhook ditambahkan"
+			} else {
+				flash = "URL tidak valid"
+			}
+		case "wh_del":
+			var id int64
+			fmt_Sscan(r.FormValue("id"), &id)
+			s.db.Exec("DELETE FROM webhooks WHERE rowid=?", id)
+			s.audit(actor, "webhook.del", "id "+r.FormValue("id"))
+			flash = "Webhook dihapus"
+		case "wh_toggle":
+			var id int64
+			fmt_Sscan(r.FormValue("id"), &id)
+			s.db.Exec("UPDATE webhooks SET active=1-active WHERE rowid=?", id)
+			flash = "Status webhook diubah"
 		case "tg":
 			s.db.Exec("INSERT INTO settings(key,value) VALUES('tg_token',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", r.FormValue("tgtoken"))
 			s.db.Exec("INSERT INTO settings(key,value) VALUES('tg_chat',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", r.FormValue("tgchat"))
 			s.loadTGFromDB()
+			s.audit(actor, "telegram.update", "")
 			flash = "Telegram tersimpan"
 		}
 	}
-	cur := s.readQris()
+	cur := s.readQrisBase()
+	curImg := s.qrisImageBase64()
 	var tgToken, tgChat string
 	s.db.QueryRow("SELECT value FROM settings WHERE key='tg_token'").Scan(&tgToken)
 	s.db.QueryRow("SELECT value FROM settings WHERE key='tg_chat'").Scan(&tgChat)
 
 	s.renderPage(w, "config", "Konfigurasi", flash, func() template.HTML {
 		var b strings.Builder
-		b.WriteString(`<div class="card"><h2>QRIS statis (template)</h2>
+		b.WriteString(`<div class="card"><h2>QRIS statis — gambar (tampil di checkout)</h2>`)
+		if curImg != "" {
+			b.WriteString(`<div style="margin:8px 0"><img src="` + curImg + `" alt="QRIS" style="width:180px;border:1px solid #eee;border-radius:10px"></div>`)
+		}
+		b.WriteString(`<form method="post"><input type="hidden" name="act" value="qrisimg">
+<input type="file" id="qrfile" accept="image/png,image/jpeg" style="margin:6px 0">
+<input type="hidden" name="img" id="imgdata">
+<div><button type="button" onclick="upl()">Upload Gambar</button>
+` )
+		if curImg != "" {
+			b.WriteString(`<form method="post" class="inline"><input type="hidden" name="act" value="qrisimg_del"><button class="del">Hapus Gambar</button></form>`)
+		}
+		b.WriteString(`</div></form>
+<small>Alternatif/dampingi QR dinamis: gambar QR statis asli lo. PNG/JPG max ~500KB.</small>
+<script>
+function upl(){var f=document.getElementById('qrfile').files[0];if(!f){alert('pilih file');return}
+var r=new FileReader();r.onload=function(){document.getElementById('imgdata').value=r.result;document.getElementById('imgdata').form.submit()};r.readAsDataURL(f)}
+</script></div>`)
+		b.WriteString(`<div class="card"><h2>QRIS statis — payload teks (buat QR dinamis per order)</h2>
 <form method="post"><input type="hidden" name="act" value="qris">
 <textarea name="qris" rows="4" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:12px;padding:8px" placeholder="000201010211...">` + cur + `</textarea>
-<button>Simpan QRIS</button> <small>Scan QR statis lo dengan scanner, paste raw text di sini.</small></form></div>`)
+<button>Simpan QRIS</button> <small>Scan QR statis lo dengan scanner, paste raw text di sini. Wajib untuk QR dinamis per order.</small></form></div>`)
+		b.WriteString(`<div class="card"><h2>Webhook — panggil saat order LUNAS</h2>`)
+		hooks := s.listWebhooks()
+		if len(hooks) > 0 {
+			b.WriteString(`<table><tr><th>URL</th><th>Status</th><th>Aksi</th></tr>`)
+			for _, hk := range hooks {
+				st := "aktif"
+				if !hk.Active {
+					st = "off"
+				}
+				b.WriteString(`<tr><td><code>` + hk.URL + `</code></td><td>` + st + `</td>
+<td><form method="post" class="inline"><input type="hidden" name="act" value="wh_toggle"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="sec">On/Off</button></form>
+<form method="post" class="inline"><input type="hidden" name="act" value="wh_del"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
+			}
+			b.WriteString(`</table>`)
+		}
+		b.WriteString(`<form method="post"><input type="hidden" name="act" value="wh_add">
+<input name="url" placeholder="https://website-loke/api/webhook" style="width:70%">
+<button>Tambah Webhook</button></form>
+<small>POST JSON <code>{event:"order.paid", order:{id,price,code,total,paid_at}}</code> + header <code>X-Paypan-Event</code>. Retry 2x jika gagal.</small></div>`)
 		b.WriteString(`<div class="card"><h2>Notifikasi Telegram (opsional)</h2>
 <form method="post"><input type="hidden" name="act" value="tg">
 <input name="tgtoken" placeholder="Bot token" value="` + tgToken + `" style="width:100%">
@@ -314,6 +411,14 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 <label style="font-size:13px;color:#344054">Password baru</label>
 <input type="password" name="newpass" placeholder="kosongkan jika tidak diubah" style="width:100%">
 <button>Simpan</button></form></div>`)
+		logs := s.recentAudit(12)
+		if len(logs) > 0 {
+			b.WriteString(`<div class="card"><h2>Audit log</h2><table><tr><th>Waktu</th><th>Oleh</th><th>Aksi</th><th>Detail</th></tr>`)
+			for _, l := range logs {
+				b.WriteString(`<tr><td>` + l["at"] + `</td><td>` + l["actor"] + `</td><td><code>` + l["action"] + `</code></td><td>` + l["detail"] + `</td></tr>`)
+			}
+			b.WriteString(`</table></div>`)
+		}
 		return template.HTML(b.String())
 	})
 }
