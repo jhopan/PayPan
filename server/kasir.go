@@ -11,8 +11,8 @@ import (
 var kasirFS embed.FS
 
 // handleKasir: halaman kasir di dalam admin layout (sidebar+header).
-// Konten kasir diambil dari static/kasir.html — hanya bagian form + script,
-// wrapper html/body/card lama dibuang.
+// static/kasir.html = full page lama. Kita ekstrak: form section (formView+
+// payView) dan script, lalu render dalam card di layout admin.
 func (s *srv) handleKasir(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSession(w, r) {
 		return
@@ -24,30 +24,35 @@ func (s *srv) handleKasir(w http.ResponseWriter, r *http.Request) {
 	}
 	raw := string(b)
 
-	// ambil isi antara <div id="formView"> ... sebelum <script>
-	// (form + payview), lalu script dipisah untuk ditempel di akhir
-	start := strings.Index(raw, `<div id="formView">`)
 	scrStart := strings.Index(raw, "<script>")
-	if start < 0 || scrStart < 0 {
+	if scrStart < 0 {
+		http.Error(w, "kasir.html invalid", 500)
+		return
+	}
+	script := raw[scrStart:]
+
+	// ambil dari <div id="formView"> sampai tepat sebelum </div> penutup
+	// terakhir sebelum <script> — tanpa membawa div wrapper card lama.
+	start := strings.Index(raw, `<div id="formView">`)
+	if start < 0 || start > scrStart {
 		http.Error(w, "kasir.html invalid", 500)
 		return
 	}
 	inner := raw[start:scrStart]
-	// buang penutup </div> card terakhir (sudah disediakan wrapper admin)
 	inner = strings.TrimSpace(inner)
+	// buang SATU penutup </div> terakhir (punya card lama)
 	inner = strings.TrimSuffix(inner, "</div>")
-	// bersihkan elemen yang tidak relevan di dalam admin (logo/sub)
+	inner = strings.TrimSpace(inner)
+	// buang logo/sub yang tidak relevan di admin
 	inner = strings.Replace(inner, `<div class="logo">Pay<span>pan</span> Kasir</div>`, "", 1)
 	inner = strings.Replace(inner, `<div class="sub">Buat tagihan QRIS · by JhopanStore</div>`, "", 1)
-	// hint jadi text-align:left biar konsisten dengan form
+	// hint left-align
 	inner = strings.Replace(inner, `class="hint"`, `class="hint" style="text-align:left"`, 1)
-	script := raw[scrStart:]
 
 	s.renderPage(w, "kasir", "Kasir", r.URL.Query().Get("m"), func() template.HTML {
 		var sb strings.Builder
-		sb.WriteString(`<div class="card" style="max-width:420px;margin:0 auto">
-<h2 style="text-align:left">Buat Tagihan</h2>
-<div id="formView" style="text-align:left">`)
+		sb.WriteString(`<div class="card" style="max-width:460px;margin:0 auto">
+<h2 style="margin:0 0 12px">Buat Tagihan</h2>`)
 		sb.WriteString(inner)
 		sb.WriteString(`</div>`)
 		sb.WriteString(script)
