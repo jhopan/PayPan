@@ -3,3 +3,8 @@ paypan-server.exe
 server.log
 qris_base.txt
 backup/
+*.exe~
+server.log
+paypan.db*
+qris_base.txt
+backup/
