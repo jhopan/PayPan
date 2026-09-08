@@ -96,6 +96,7 @@ func main() {
 	mux.HandleFunc("/admin/apps", s.handleAdminApps)
 	mux.HandleFunc("/admin/config", s.handleAdminConfig)
 	mux.HandleFunc("/admin/log", s.handleAdminLog)
+	mux.HandleFunc("/admin/laporan", s.handleAdminLaporan)
 	mux.HandleFunc("/admin/tx/", s.handleTxDetail)
 	mux.HandleFunc("/admin", s.handleAdminHome)
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
