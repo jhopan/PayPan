@@ -173,6 +173,18 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// lapisan 2: notif non-pembayaran (pencairan/topup/refund) gak boleh match order.
+	// cegah skenario "pencairan Rp10.005" kebetulan cocok order Rp10.005.
+	low := strings.ToLower(n.Title + " " + n.Text)
+	nonPay := []string{"pencairan dana", "pencairan berhasil", "top up saldo", "topup berhasil",
+		"deposit berhasil", "penarikan dana", "tarik dana", "refund"}
+	for _, p := range nonPay {
+		if strings.Contains(low, p) {
+			s.writeJSON(w, 200, map[string]any{"ok": true, "matched": false, "ignored": "non-payment"})
+			return
+		}
+	}
+
 	// 2. match exact: order pending dengan total = amount, belum expired
 	now := time.Now().Unix()
 	var oid string

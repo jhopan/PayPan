@@ -66,6 +66,9 @@ class ListenerService : NotificationListenerService() {
                 else -> return
             }
 
+            // notif non-pembayaran (pencairan dana, top up, refund) — skip
+            if (PayParser.isNonPayment(title, body)) return
+
             val amount = PayParser.parseAmount(body)
             val source = PayParser.parseSource(pkg, title, body)
             // id = key notif (stabil saat notif di-update) + hash konten.

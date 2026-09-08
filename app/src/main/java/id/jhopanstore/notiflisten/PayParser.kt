@@ -11,6 +11,25 @@ object PayParser {
 
     private val AMOUNT: Pattern = Pattern.compile("(?:Rp|IDR)\\.?\\s*([\\d.,]+)")
 
+    // notif GoPay Merchant yang BUKAN pembayaran masuk — jangan dikirim.
+    // (pencairan dana, top up saldo, refund keluar, dsb.)
+    private val IGNORE_PATTERNS = listOf(
+        "pencairan dana",
+        "pencairan berhasil",
+        "top up saldo",
+        "topup berhasil",
+        "deposit berhasil",
+        "penarikan dana",
+        "tarik dana",
+        "refund"
+    )
+
+    /** true kalau notif ini bukan pembayaran masuk (skip). */
+    fun isNonPayment(title: String?, text: String): Boolean {
+        val hay = ((title ?: "") + " " + text).lowercase()
+        return IGNORE_PATTERNS.any { hay.contains(it) }
+    }
+
     // (regex title|text case-insensitive, source label) — rule spesifik SEBELUM rule umum
     private val SOURCE_RULES = listOf(
         Pair("gopaymerchant", "GoPay Merchant"),
