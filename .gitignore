@@ -1,18 +1,13 @@
-*.iml
-.gradle/
-local.properties
-.idea/
-build/
-captures/
-.externalNativeBuild/
-.cxx/
-*.apk.idsig
-app/
-build.gradle
-gradle/
-gradle.properties
-gradlew
-gradlew.bat
-settings.gradle
-tools/
-tools/
+# Go server artifacts
+paypan.db*
+paypan.db-shm
+paypan.db-wal
+paypan-server
+paypan-server.exe
+paypan-server.exe~
+server.log
+qris_base.txt
+backup/
+
+# secrets
+*.secret
