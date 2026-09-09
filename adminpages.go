@@ -42,7 +42,7 @@ func (s *srv) handleLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		r.ParseForm()
-		if r.FormValue("user") == s.adminUser() && r.FormValue("pass") == s.adminPass() {
+		if r.FormValue("user") == s.adminUser() && s.adminPassCheck(r.FormValue("pass")) {
 			limiter.reset(ip)
 			tok := sessions.newSession()
 			http.SetCookie(w, &http.Cookie{

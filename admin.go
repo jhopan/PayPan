@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"net/http"
 	"strings"
@@ -118,6 +119,10 @@ func (ss *sessionStore) drop(tok string) {
 }
 
 // adminPass baca password admin dari settings (default dibuat saat init)
+func (s *srv) adminPassCheck(input string) bool {
+	// constant-time compare: cegah timing side-channel
+	return subtle.ConstantTimeCompare([]byte(input), []byte(s.adminPass())) == 1
+}
 func (s *srv) adminUser() string {
 	var p string
 	s.db.QueryRow("SELECT value FROM settings WHERE key='admin_user'").Scan(&p)

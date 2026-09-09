@@ -122,6 +122,14 @@ func apiJanitorWorker() {
 			}
 		}
 		apiLimiter.mu.Unlock()
+		// sekalian: bersihkan sesi admin yang expired
+		sessions.mu.Lock()
+		for k, v := range sessions.m {
+			if now.After(v) {
+				delete(sessions.m, k)
+			}
+		}
+		sessions.mu.Unlock()
 	}
 }
 
