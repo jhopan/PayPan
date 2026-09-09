@@ -443,6 +443,9 @@ func (s *srv) notifyTGResult(msg, orderID string) {
 				detail += " order " + orderID
 			}
 			s.audit("system", "telegram.gagal", detail+": "+msg)
+			// kirim alert lokal ke Telegram lo (chat pertama) — jangan sampai
+			// kegagalan notif ke customer luput dari perhatian
+			s.audit("system", "notif.failed", "amount/id tidak terkirim ke server tujuan: "+orderID)
 		}
 	}
 }
