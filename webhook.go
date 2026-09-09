@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -17,18 +18,19 @@ import (
 // fireWebhooks dipanggil (goroutine) saat order jadi paid: dari match notif
 // maupun manual mark-paid. Fire-and-forget per URL aktif; result dicatat.
 func (s *srv) fireWebhooks(orderID string, total int64) {
-	rows, err := s.db.Query("SELECT rowid,url FROM webhooks WHERE active=1")
+		rows, err := s.db.Query("SELECT rowid,url,secret FROM webhooks WHERE active=1")
 	if err != nil {
 		return
 	}
 	type wh struct {
-		id  int64
-		url string
+		id     int64
+		url    string
+		secret string
 	}
 	var urls []wh
 	for rows.Next() {
 		var w wh
-		if rows.Scan(&w.id, &w.url) == nil {
+		if rows.Scan(&w.id, &w.url, &w.secret) == nil {
 			urls = append(urls, w)
 		}
 	}
@@ -49,14 +51,14 @@ func (s *srv) fireWebhooks(orderID string, total int64) {
 
 	for _, w := range urls {
 		go func(w wh) {
-			code := s.deliverWebhook(w.url, payload)
+			code := s.deliverWebhook(w.url, payload, w.secret, w.id)
 			s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
 				orderID, w.url, code)
 			// retry sederhana: selain 2xx coba 2x lagi dengan jeda
 			if code < 200 || code >= 300 {
 				for i := 0; i < 2; i++ {
 					time.Sleep(30 * time.Second)
-					code = s.deliverWebhook(w.url, payload)
+					code = s.deliverWebhook(w.url, payload, w.secret, w.id)
 					s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
 						orderID, w.url, code)
 					if code >= 200 && code < 300 {
@@ -68,7 +70,7 @@ func (s *srv) fireWebhooks(orderID string, total int64) {
 	}
 }
 
-func (s *srv) deliverWebhook(url string, payload []byte) int {
+func (s *srv) deliverWebhook(url string, payload []byte, secret string, hookID int64) int {
 	req, err := http.NewRequest("POST", url, bytes.NewReader(payload))
 	if err != nil {
 		log.Println("webhook bad url:", err)
@@ -76,9 +78,10 @@ func (s *srv) deliverWebhook(url string, payload []byte) int {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Paypan-Event", "order.paid")
-	// HMAC signature: penerima bisa verifikasi asli/palsu
-	// signature = hex(HMAC_SHA256(secret, body)); secret = webhook secret (settings)
-	mac := hmac.New(sha256.New, []byte(s.webhookSecret()))
+	req.Header.Set("X-Paypan-Hook-ID", strconv.FormatInt(hookID, 10))
+	// HMAC per-webhook: tiap webhook punya secret sendiri.
+	// Penerima verifikasi: HMAC_SHA256(secret_webhook_ini, raw_body) == X-Paypan-Signature
+	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(payload)
 	req.Header.Set("X-Paypan-Signature", hex.EncodeToString(mac.Sum(nil)))
 	resp, err := s.httpc.Do(req)
@@ -89,17 +92,6 @@ func (s *srv) deliverWebhook(url string, payload []byte) int {
 	return resp.StatusCode
 }
 
-// webhookSecret: secret bersama utk verifikasi HMAC di sisi penerima
-func (s *srv) webhookSecret() string {
-	var sec string
-	s.db.QueryRow("SELECT value FROM settings WHERE key='webhook_secret'").Scan(&sec)
-	if sec == "" {
-		// auto-generate sekali
-		sec = genToken()
-		s.db.Exec("INSERT INTO settings(key,value) VALUES('webhook_secret',?)", sec)
-	}
-	return sec
-}
 
 // manualPaid: tandai order lunas manual (dari halaman detail) + fire webhook.
 func (s *srv) manualPaid(orderID string) bool {

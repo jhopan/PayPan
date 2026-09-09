@@ -68,32 +68,61 @@ func clientIP(r *http.Request) string {
 
 type apiLimit struct {
 	mu    sync.Mutex
-	hits  map[string][]time.Time
+	hits  map[string]*tokenHits
 }
 
-var apiLimiter = &apiLimit{hits: map[string][]time.Time{}}
+type tokenHits struct {
+	times []time.Time
+	last  time.Time // untuk janitor eviction
+}
+
+var apiLimiter = &apiLimit{hits: map[string]*tokenHits{}}
 
 const (
 	apiWindow = time.Minute
 	apiMax    = 60 // 60 req/menit per token — jauh di atas kebutuhan normal
+	// janitor: buang token yang tidak aktif, cegah map tumbuh tak terkendali
+	apiJanitorEvery = 10 * time.Minute
+	apiIdleEvict    = 30 * time.Minute
 )
 
 func (l *apiLimit) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
-	keep := l.hits[key][:0]
-	for _, t := range l.hits[key] {
+	th, exists := l.hits[key]
+	if !exists {
+		th = &tokenHits{}
+		l.hits[key] = th
+	}
+	keep := th.times[:0]
+	for _, t := range th.times {
 		if now.Sub(t) < apiWindow {
 			keep = append(keep, t)
 		}
 	}
-	l.hits[key] = keep
-	if len(keep) >= apiMax {
+	th.times = keep
+	th.last = now
+	if len(th.times) >= apiMax {
 		return false
 	}
-	l.hits[key] = append(keep, now)
+	th.times = append(th.times, now)
 	return true
+}
+
+// apiJanitorWorker: buang entri rate limit yang idle > apiIdleEvict.
+// Jalankan sebagai goroutine saat startup.
+func apiJanitorWorker() {
+	for range time.Tick(apiJanitorEvery) {
+		now := time.Now()
+		apiLimiter.mu.Lock()
+		for k, th := range apiLimiter.hits {
+			if now.Sub(th.last) > apiIdleEvict {
+				delete(apiLimiter.hits, k)
+			}
+		}
+		apiLimiter.mu.Unlock()
+	}
 }
 
 // ---------- backup DB otomatis ----------
