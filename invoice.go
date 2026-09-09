@@ -138,7 +138,10 @@ func (s *srv) handleInvoiceCancel(w http.ResponseWriter, r *http.Request) {
 	respOK(w, map[string]any{"id": id, "status": "expired"})
 }
 
-// POST /api/invoice/{id}/refund — tandai paid sebagai refunded (dana sudah dikembalikan manual).
+// POST /api/invoice/{id}/refund — tandai paid sebagai refunded.
+// CATATAN: refund di sini = CATATAN ADMINISTRATIF di PayPan saja — dana asli
+// dikembalikan manual oleh merchant via app e-wallet (QRIS statis gak punya
+// mekanisme refund otomatis). Dipakai agar status invoice & laporan akurat.
 func (s *srv) handleInvoiceRefund(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respErr(w, 405, "method not allowed")

@@ -2,6 +2,8 @@
 
 Payment gateway QRIS mandiri — satu binary Go, tanpa framework. Menerima notifikasi pembayaran dari [NotifListenPayment](https://github.com/jhopan/NotifListenPayment) (app Android yang merelay notif e-wallet), mencocokkan ke order, dan mengubah QRIS statis menjadi QRIS dinamis per order.
 
+**Dokumentasi API untuk integrator: [API.md](API.md)** — buat invoice, cek status, webhook HMAC, contoh kode.
+
 Dikembangkan oleh **JhopanStore**.
 
 ## Arsitektur
