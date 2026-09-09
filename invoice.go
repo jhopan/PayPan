@@ -87,13 +87,14 @@ func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		respErr(w, 400, msg)
 		return
 	}
-	// lapisan anti slot-filling: maksimal 10 order pending aktif per app-token.
+	// lapisan anti slot-filling: maksimal 50 order pending aktif per app-token.
+	// (expired otomatis lewat dari hitungan karena status berubah)
 	appRowid := s.appRowidByToken(r.Header.Get("Authorization"))
 	if appRowid > 0 {
 		var pendingCount int
 		s.db.QueryRow("SELECT COUNT(*) FROM orders WHERE status='pending' AND created_by=?", appRowid).Scan(&pendingCount)
-		if pendingCount >= 10 {
-			respErr(w, 429, "terlalu banyak invoice pending aktif dari aplikasi ini (maks 10)")
+		if pendingCount >= 50 {
+			respErr(w, 429, "terlalu banyak invoice pending aktif dari aplikasi ini (maks 50)")
 			return
 		}
 	}
