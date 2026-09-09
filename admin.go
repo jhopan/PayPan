@@ -156,4 +156,3 @@ func (s *srv) requireSession(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func newCSRF() string { return genToken() }

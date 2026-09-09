@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/base64"
+	"fmt"
 	"html/template"
 	"net/http"
 	"os"
@@ -273,7 +274,7 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 			}
 		case "rotate":
 			var id int64
-			fmt_Sscan(r.FormValue("id"), &id)
+			fmt.Sscan(r.FormValue("id"), &id)
 			s.db.Exec("UPDATE apps SET token=? WHERE rowid=?", genToken(), id)
 			var nm string
 			s.db.QueryRow("SELECT name FROM apps WHERE rowid=?", id).Scan(&nm)
@@ -281,12 +282,12 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 			flash = "Token di-rotate"
 		case "toggle":
 			var id int64
-			fmt_Sscan(r.FormValue("id"), &id)
+			fmt.Sscan(r.FormValue("id"), &id)
 			s.db.Exec("UPDATE apps SET active=1-active WHERE rowid=?", id)
 			flash = "Status aplikasi diubah"
 		case "del":
 			var id int64
-			fmt_Sscan(r.FormValue("id"), &id)
+			fmt.Sscan(r.FormValue("id"), &id)
 			s.db.Exec("DELETE FROM apps WHERE rowid=?", id)
 			flash = "Aplikasi dihapus"
 		}
@@ -426,13 +427,13 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		case "wh_del":
 			var id int64
-			fmt_Sscan(r.FormValue("id"), &id)
+			fmt.Sscan(r.FormValue("id"), &id)
 			s.db.Exec("DELETE FROM webhooks WHERE rowid=?", id)
 			s.audit(actor, "webhook.del", "id "+r.FormValue("id"))
 			flash = "Webhook dihapus"
 		case "wh_toggle":
 			var id int64
-			fmt_Sscan(r.FormValue("id"), &id)
+			fmt.Sscan(r.FormValue("id"), &id)
 			s.db.Exec("UPDATE webhooks SET active=1-active WHERE rowid=?", id)
 			flash = "Status webhook diubah"
 		case "tg":

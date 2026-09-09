@@ -86,20 +86,7 @@ func codeUsedInPrice(db *sql.DB, price int64, code int) bool {
 	return n > 0
 }
 
-// pickCode: cari kode bebas untuk price: mulai 001, skip yang dipakai di level
-// yang sama atau yang totalnya bentrok dengan level lain. Kembalikan kandidat pertama.
-func pickCode(db *sql.DB, price int64) (int, bool) {
-	for c := 1; c <= 999; c++ {
-		if codeUsedInPrice(db, price, c) {
-			continue
-		}
-		if totalClaimed(db, price+int64(c)) {
-			continue
-		}
-		return c, true
-	}
-	return 0, false
-}
+
 
 // pickCodeTx: sama dengan pickCode tapi di dalam transaksi aktif (atomic claim).
 func pickCodeTx(tx *sql.Tx, price int64) (int, bool) {
