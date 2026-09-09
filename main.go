@@ -67,6 +67,21 @@ func main() {
 	})
 	// kasir: bagian dari /admin/*
 	mux.HandleFunc("/admin/kasir", s.handleKasir)
+	// API invoice terstandarisasi (untuk bot/website/integrasi)
+	mux.HandleFunc("/api/invoice", s.handleInvoiceCreate)
+	mux.HandleFunc("/api/invoice/", func(w http.ResponseWriter, r *http.Request) {
+		p := strings.TrimPrefix(r.URL.Path, "/api/invoice/")
+		switch {
+		case strings.HasSuffix(p, "/cancel"):
+			r.URL.Path = "/api/invoice/" + strings.TrimSuffix(p, "/cancel") + "/cancel"
+			s.handleInvoiceCancel(w, r)
+		case strings.HasSuffix(p, "/refund"):
+			r.URL.Path = "/api/invoice/" + strings.TrimSuffix(p, "/refund") + "/refund"
+			s.handleInvoiceRefund(w, r)
+		default:
+			s.handleInvoiceGet(w, r)
+		}
+	})
 	mux.HandleFunc("/admin/kasir/order", func(w http.ResponseWriter, r *http.Request) {
 		// endpoint order khusus kasir: auth = session admin, bukan token
 		c, err := r.Cookie("paypan_session")

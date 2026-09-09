@@ -291,55 +291,13 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 400, map[string]string{"error": "price>0 wajib"})
 		return
 	}
-	if q.Price < 1000 {
-		s.writeJSON(w, 400, map[string]string{"error": "minimal Rp1.000 (3 digit terakhir dipakai sebagai kode unik 001-999)"})
+	if errResp := validatePrice(q.Price); errResp != "" {
+		s.writeJSON(w, 400, map[string]string{"error": errResp})
 		return
 	}
-	if q.Price > 9_000_000 {
-		s.writeJSON(w, 400, map[string]string{"error": "price terlalu besar (max 9.000.000; kode 1-999)"})
-		return
-	}
-
-	// klaim total eksklusif: TRANSAKSI IMMEDIATE — cek & insert atomic.
-	// Dua request paralel: yang pertama kunci DB, cek, insert, commit; yang
-	// kedua masuk setelahnya dan lihat total sudah di-klaim -> geser kode.
-	var oid string
-	var code int
-	var total int64
-	now := time.Now().Unix()
-	exp := now + 5*60 // 5 menit window pembayaran
-	claimed := false
-	for attempt := 0; attempt < 30; attempt++ {
-		tx, err := s.db.Begin() // modernc/sqlite single-writer: ini serialize klaim
-		if err != nil {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		c, ok := pickCodeTx(tx, q.Price)
-		if !ok {
-			tx.Rollback()
-			break
-		}
-		code = c
-		total = q.Price + int64(code)
-		oid = newOrderID()
-		res, err := tx.Exec(
-			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
-			oid, q.Price, code, total, now, exp)
-		if err != nil {
-			tx.Rollback()
-			continue
-		}
-		if n, _ := res.RowsAffected(); n == 1 {
-			if err := tx.Commit(); err == nil {
-				claimed = true
-				break
-			}
-		}
-		tx.Rollback()
-	}
-	if !claimed {
-		s.writeJSON(w, 503, map[string]string{"error": "semua kode sedang dipakai order aktif, coba beberapa saat lagi"})
+	oid, code, total, exp, err := s.claimOrder(q.Price)
+	if err != nil {
+		s.writeJSON(w, 503, map[string]string{"error": err.Error()})
 		return
 	}
 	qrData, err := buildDynamicQR(s.qris, total)
@@ -351,6 +309,52 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		"id": oid, "price": q.Price, "code": code, "total": total,
 		"expires_at": exp, "qr": qrData,
 	})
+}
+
+// validatePrice: aturan harga (dipakai semua jalur pembuatan order).
+func validatePrice(p int64) string {
+	if p < 1000 {
+		return "minimal Rp1.000 (3 digit terakhir dipakai sebagai kode unik 001-999)"
+	}
+	if p > 9_000_000 {
+		return "maksimal Rp9.000.000 (kode 1-999)"
+	}
+	return ""
+}
+
+// claimOrder: klaim total eksklusif via transaksi IMMEDIATE.
+// Dipakai createOrder (kasir/API lama) dan createInvoice (API terstandarisasi).
+func (s *srv) claimOrder(price int64) (oid string, code int, total int64, exp int64, err error) {
+	now := time.Now().Unix()
+	exp = now + 5*60
+	for attempt := 0; attempt < 30; attempt++ {
+		tx, txErr := s.db.Begin()
+		if txErr != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		c, ok := pickCodeTx(tx, price)
+		if !ok {
+			tx.Rollback()
+			return "", 0, 0, 0, fmt.Errorf("semua kode sedang dipakai order aktif, coba beberapa saat lagi")
+		}
+		total = price + int64(c)
+		oid = newOrderID()
+		res, txErr := tx.Exec(
+			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
+			oid, price, c, total, now, exp)
+		if txErr != nil {
+			tx.Rollback()
+			continue
+		}
+		if n, _ := res.RowsAffected(); n == 1 {
+			if cErr := tx.Commit(); cErr == nil {
+				return oid, c, total, exp, nil
+			}
+		}
+		tx.Rollback()
+	}
+	return "", 0, 0, 0, fmt.Errorf("gagal klaim total setelah beberapa percobaan")
 }
 
 // newOrderID: 8 byte random hex — cukup unik, tanpa dep.
