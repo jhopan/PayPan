@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS orders (
 	status TEXT NOT NULL DEFAULT 'pending',
 	created_at INTEGER NOT NULL,
 	expires_at INTEGER NOT NULL,
+	created_by INTEGER NOT NULL DEFAULT 0,
 	paid_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_orders_status_total ON orders(status, total);
@@ -71,7 +72,6 @@ CREATE TABLE IF NOT EXISTS webhooks (
 	active INTEGER NOT NULL DEFAULT 1,
 	created_at INTEGER NOT NULL
 );
-
 CREATE TABLE IF NOT EXISTS webhook_log (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	order_id TEXT,
@@ -90,6 +90,20 @@ func initDB(path string) (*sql.DB, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err
+	}
+	// migrasi ringan: tambah kolom yang belum ada (CREATE TABLE gak update tabel lama)
+	var colCount int
+	db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name='created_by'").Scan(&colCount)
+	if colCount == 0 {
+		if _, err := db.Exec("ALTER TABLE orders ADD COLUMN created_by INTEGER NOT NULL DEFAULT 0"); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+	var whSec int
+	db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('webhooks') WHERE name='secret'").Scan(&whSec)
+	if whSec == 0 {
+		db.Exec("ALTER TABLE webhooks ADD COLUMN secret TEXT")
 	}
 	return db, nil
 }

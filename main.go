@@ -29,25 +29,25 @@ func main() {
 	}
 
 	ensureAdminDefaults(db)
+	_ = db
 
-	// template QRIS statis: raw text payload, dibaca sekali saat start
-	qrisBytes, err := os.ReadFile("qris_base.txt")
-	if err != nil {
-		log.Fatal("qris_base.txt wajib ada di folder kerja server (raw text QRIS statis): ", err)
-	}
-	qrisBase := strings.TrimSpace(string(qrisBytes))
-	if !strings.Contains(qrisBase, "010211") || !strings.Contains(qrisBase, "5802ID") {
-		log.Fatal("payload qris_base.txt tidak dikenali (butuh tag 010211 + 5802ID)")
-	}
-
+	// QRIS integrity: butuh srv method yang pakai db — inisialisasi srv minimal dulu
 	s := &srv{
 		db:      db,
-		qris:    qrisBase,
 		token:   *tok,
 		tgToken: *tgToken,
 		tgChat:  *tgChat,
 		httpc:   &http.Client{Timeout: 10 * time.Second},
 	}
+
+	// QRIS hash pinning: verifikasi integritas payload saat startup
+	qrisBase, qrisOK := s.verifyQrisIntegrity()
+	if !qrisOK {
+		log.Println("PERINGATAN: qris_base.txt berubah tanpa melalui admin — invoice DINONAKTIFKAN")
+		s.alertQrisTamper()
+	}
+	s.qris = qrisBase
+
 	// token/chat Telegram dari web (settings) menimpa flag — selalu DB yang menang
 	s.loadTGFromDB()
 	_ = s.token // legacy: auth lewat authScope (tabel apps)

@@ -57,6 +57,17 @@ func (s *srv) invoiceView(id string) (any, error) {
 	return view, nil
 }
 
+// appRowidByToken: cari rowid aplikasi dari token bearer (untuk limit pending-per-token).
+func (s *srv) appRowidByToken(authHeader string) int64 {
+	tok := strings.TrimPrefix(authHeader, "Bearer ")
+	if tok == "" {
+		return 0
+	}
+	var id int64
+	s.db.QueryRow("SELECT rowid FROM apps WHERE token=? AND active=1", tok).Scan(&id)
+	return id
+}
+
 // POST /api/invoice — buat invoice.
 func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -76,7 +87,17 @@ func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		respErr(w, 400, msg)
 		return
 	}
-	oid, code, total, exp, err := s.claimOrder(q.Price)
+	// lapisan anti slot-filling: maksimal 10 order pending aktif per app-token.
+	appRowid := s.appRowidByToken(r.Header.Get("Authorization"))
+	if appRowid > 0 {
+		var pendingCount int
+		s.db.QueryRow("SELECT COUNT(*) FROM orders WHERE status='pending' AND created_by=?", appRowid).Scan(&pendingCount)
+		if pendingCount >= 10 {
+			respErr(w, 429, "terlalu banyak invoice pending aktif dari aplikasi ini (maks 10)")
+			return
+		}
+	}
+	oid, code, total, exp, err := s.claimOrder(q.Price, appRowid)
 	if err != nil {
 		respErr(w, 503, err.Error())
 		return

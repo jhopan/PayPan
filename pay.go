@@ -69,8 +69,8 @@ func totalClaimed(db *sql.DB, total int64) bool {
 	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, total).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, total).Scan(&n)
 	return n > 0
 }
 
@@ -81,8 +81,8 @@ func codeUsedInPrice(db *sql.DB, price int64, code int) bool {
 	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price, code).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, price, code).Scan(&n)
 	return n > 0
 }
 
@@ -109,8 +109,8 @@ func totalClaimedTx(tx *sql.Tx, total int64) bool {
 	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, total).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, total).Scan(&n)
 	return n > 0
 }
 
@@ -119,8 +119,8 @@ func codeUsedInPriceTx(tx *sql.Tx, price int64, code int) bool {
 	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 86400)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 86400))`, price, code).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, price, code).Scan(&n)
 	return n > 0
 }
 
@@ -282,7 +282,7 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 400, map[string]string{"error": errResp})
 		return
 	}
-	oid, code, total, exp, err := s.claimOrder(q.Price)
+	oid, code, total, exp, err := s.claimOrder(q.Price, 0)
 	if err != nil {
 		s.writeJSON(w, 503, map[string]string{"error": err.Error()})
 		return
@@ -311,7 +311,8 @@ func validatePrice(p int64) string {
 
 // claimOrder: klaim total eksklusif via transaksi IMMEDIATE.
 // Dipakai createOrder (kasir/API lama) dan createInvoice (API terstandarisasi).
-func (s *srv) claimOrder(price int64) (oid string, code int, total int64, exp int64, err error) {
+// createdBy = rowid aplikasi yang membuat (untuk limit pending-per-token), 0 = tidak diketahui.
+func (s *srv) claimOrder(price int64, createdBy int64) (oid string, code int, total int64, exp int64, err error) {
 	now := time.Now().Unix()
 	exp = now + 5*60
 	for attempt := 0; attempt < 30; attempt++ {
@@ -328,8 +329,8 @@ func (s *srv) claimOrder(price int64) (oid string, code int, total int64, exp in
 		total = price + int64(c)
 		oid = newOrderID()
 		res, txErr := tx.Exec(
-			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at) VALUES(?,?,?,?,'pending',?,?)",
-			oid, price, c, total, now, exp)
+			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at,created_by) VALUES(?,?,?,?,'pending',?,?,?)",
+			oid, price, c, total, now, exp, createdBy)
 		if txErr != nil {
 			tx.Rollback()
 			continue
