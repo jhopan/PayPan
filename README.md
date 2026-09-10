@@ -50,13 +50,13 @@ Webhook (site lain) ◄───────────────────
 curl -fsSL https://raw.githubusercontent.com/jhopan/PayPan/master/install.sh | bash
 ```
 
-Installer otomatis: cek dependencies → download binary siap pakai dari GitHub Releases → systemd service → setup QRIS → pilih tunnel (Cloudflare/ngrok/Caddy/Nginx) → pasang menu kontrol `paypan`.
+Installer otomatis: cek dependencies → download binary siap pakai dari GitHub Releases → systemd service → setup QRIS → pilih tunnel (Cloudflare/ngrok/Caddy/Nginx) → pasang menu kontrol `menupaypan`.
 
-Setelah terpasang, ketik `paypan` di terminal mana pun (auto-buka menu):
+Setelah terpasang, ketik `menupaypan` di terminal mana pun (auto-buka menu):
 
 ```
-sudo paypan          # start/stop/restart/log/update/uninstall + tunnel
-sudo paypan install  # jalankan ulang installer (repair)
+sudo menupaypan          # start/stop/restart/log/update/uninstall + tunnel
+sudo menupaypan install  # jalankan ulang installer (repair)
 ```
 
 ## Setup manual (tanpa installer)

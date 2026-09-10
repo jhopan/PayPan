@@ -12,7 +12,7 @@
 #   - cek OS/arch, cek & install dependencies (curl, tar, jq — via apt/dnf/yum)
 #   - download binary SIAP PAKAI dari GitHub Releases (bukan build dari source)
 #   - setup folder /opt/paypan + data /var/lib/paypan
-#   - install menu `paypan` untuk start/stop/restart/status/log/update/uninstall
+#   - install menu `menupaypan` untuk start/stop/restart/status/log/update/uninstall
 #   - pilihan tunnel: cloudflared / ngrok / caddy / nginx / tanpa tunnel
 # ============================================================
 set -euo pipefail
@@ -272,12 +272,12 @@ EOF
 }
 
 # ---------- menu ----------
-# patch_menu_entry <file>: ubah salinan installer supaya `paypan` (tanpa argumen)
+# patch_menu_entry <file>: ubah salinan installer supaya `menupaypan` (tanpa argumen)
 # langsung buka menu, bukan jalanin installer lagi. Murni sed (no python dependency).
 patch_menu_entry() {
   local f="$1"
   sed -i 's|^main "\$@"$|if [[ $# -eq 0 ]]; then menu; else main "$@"; fi|' "$f"
-  grep -q 'if \[\[ \$# -eq 0 \]\]; then menu' "$f" && say "Menu auto-aktif: ketik ${C}paypan${R} di terminal mana pun." || warn "patch menu gagal (jalankan manual: paypan install)"
+  grep -q 'if \[\[ \$# -eq 0 \]\]; then menu' "$f" && say "Menu auto-aktif: ketik ${C}menupaypan${R} di terminal mana pun." || warn "patch menu gagal (jalankan manual: menupaypan install)"
 }
 
 menu() {
@@ -341,7 +341,7 @@ uninstall() {
   rm -f "/etc/systemd/system/${SERVICE}.service" "/etc/systemd/system/${SERVICE}-tunnel.service"
   systemctl daemon-reload
   rm -rf "$INSTALL_DIR"
-  rm -f /usr/local/bin/paypan
+  rm -f /usr/local/bin/menupaypan
   say "Uninstalled. Data di ${DATA_DIR} gak disentuh (hapus manual kalau mau)."
 }
 
@@ -371,14 +371,14 @@ main() {
   systemctl is-active --quiet "${SERVICE}" && say "Paypan jalan: http://127.0.0.1:${PORT}" || die "Server gagal start — cek: journalctl -u ${SERVICE}"
   setup_tunnel
 
-  # shortcut `paypan` di PATH: salin installer ke /usr/local/bin (bukan symlink ke
+  # shortcut `menupaypan` di PATH: salin installer ke /usr/local/bin (bukan symlink ke
   # file sementara curl|bash), lalu sedikit patch supaya langsung buka menu
-  install -m 755 "$0" /usr/local/bin/paypan
-  patch_menu_entry /usr/local/bin/paypan
+  install -m 755 "$0" /usr/local/bin/menupaypan
+  patch_menu_entry /usr/local/bin/menupaypan
 
   echo
   say -e "Selesai! Web admin: ${C}http://localhost:${PORT}/admin${R} (default admin/admin123 — SEGERA GANTI)"
-  say "Menu kontrol kapan saja: ketik ${C}paypan${R} di terminal mana pun (auto-buka menu)"
+  say "Menu kontrol kapan saja: ketik ${C}menupaypan${R} di terminal mana pun (auto-buka menu)"
   say "Data DB: ${DATA_DIR}/paypan.db  |  Binary: ${BIN}"
 }
 
