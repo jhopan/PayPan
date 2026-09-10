@@ -493,7 +493,7 @@ var r=new FileReader();r.onload=function(){document.getElementById('imgdata').va
 <label style="font-size:13px;color:#344054;font-weight:600">Bot Token</label>
 <input name="tgtoken" placeholder="123456:ABC-DEF..." value="` + tgToken + `" style="width:100%">
 <label style="font-size:13px;color:#344054;font-weight:600">Chat ID</label>
-<input name="tgchat" placeholder="1491946180 (beberapa: pisah koma)" value="` + tgChat + `" style="width:100%">
+<input name="tgchat" placeholder="123456789 (beberapa: pisah koma)" value="` + tgChat + `" style="width:100%">
 <button style="margin-top:10px">Simpan</button></form></div>`)
 		// ---- Webhook ----
 		b.WriteString(`<div class="card"><h2>Webhook</h2>`)

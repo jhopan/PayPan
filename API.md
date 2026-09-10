@@ -156,7 +156,9 @@ def verify(body_bytes: bytes, signature: str, secret: str) -> bool:
     expected = hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 
-# secret = "webhook_secret" dari settings (bisa dilihat admin saat setup webhook)
+# secret = per-webhook, 16 karakter acak (pp_ + [a-zA-Z0-9]).
+# Dilihat & di-rotate dari admin → Konfigurasi → Webhook.
+# JANGAN pakai satu secret untuk semua webhook; tiap webhook punya secret sendiri.
 ```
 
 - Signature dihitung dari **raw request body** (sebelum di-parse).
@@ -168,6 +170,7 @@ def verify(body_bytes: bytes, signature: str, secret: str) -> bool:
 ## 6. Rate limit & kode error
 
 - **60 request/menit** per token. Lebih dari itu → `429`.
+- Maksimal **50 invoice pending aktif** per token (anti slot-filling). Invoice expired otomatis bebas dari hitungan.
 - Login admin: 5x/10 menit per IP.
 
 | HTTP | Arti |
@@ -182,7 +185,29 @@ def verify(body_bytes: bytes, signature: str, secret: str) -> bool:
 
 ---
 
-## 7. Contoh lengkap
+## 7. Token & secret — format keamanan
+
+Semua kredensial yang dibuat PayPan mengikuti format sama:
+
+```
+pp_ + 16 karakter acak [a-zA-Z0-9]     (≈95 bit entropi, crypto/rand)
+contoh bentuk: pp_xK4mT9qLw2RbN7cE     (contoh bentuk saja — jangan dipakai)
+```
+
+| Kredensial | Dibuat di | Rotasi |
+|---|---|---|
+| Token API per-app | admin → Aplikasi & Token | tombol Rotate (token lama langsung mati) |
+| Secret webhook per-hook | otomatis saat webhook ditambahkan | hapus + tambah ulang webhook |
+| Password admin | admin → Konfigurasi → Login Admin | kapan saja |
+
+Praktik aman:
+- 1 token per aplikasi — jangan share token antar app/bot/website
+- Simpan token di env var / secret manager, **jangan hardcode** di source code
+- Kalau token bocor → Rotate instan dari admin, app lain tidak terpengaruh
+
+---
+
+## 8. Contoh lengkap
 
 Lihat [`examples/integrator.py`](examples/integrator.py) — fungsi siap pakai `create_invoice`, `get_invoice`, `cancel_invoice`, `wait_paid` + dokumentasi verifikasi webhook.
 

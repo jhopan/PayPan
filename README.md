@@ -59,7 +59,7 @@ sudo menupaypan          # start/stop/restart/log/update/uninstall + tunnel
 sudo menupaypan install  # jalankan ulang installer (repair)
 ```
 
-## Setup manual (tanpa installer)
+## Setup (lokal)
 
 ```bash
 # 1. siapkan payload QRIS statis (scan QR lo, simpan raw text)
@@ -70,8 +70,11 @@ go build -o paypan-server .
 ./paypan-server -addr :9090
 
 # 3. buka admin
-# http://localhost:9090/admin  (default: admin / admin123 — segera ganti)
+# http://localhost:9090/admin  (default: admin / admin123 — WAJIB ganti setelah login pertama)
 ```
+
+> **Kredensial default** (`admin`/`admin123` dan token seed `master`) hanya ada saat first-run
+> untuk akses pertama. Keduanya wajib diganti sebelum dipakai — lihat [API.md § Token & secret](API.md#7-token--secret--format-keamanan).
 
 ## Download binary siap pakai
 
@@ -86,6 +89,7 @@ Checklist production:
 
 - Jalankan di balik **CF tunnel / reverse proxy** (HTTPS wajib)
 - Ganti password admin (`admin123` default) + rotate token `master` dari menu Aplikasi
+- Simpan token di env var / secret manager — jangan hardcode di source
 - Backup otomatis di folder `backup/` (rotasi 28 file ≈ 7 hari) — offsite opsional
 - Verifikasi hash QRIS jalan: ubah `qris_base.txt` manual → server tolak invoice + kirim Telegram alarm
 
