@@ -135,4 +135,4 @@ assert hmac.compare_digest(expected, request.headers["X-Paypan-Signature"])
 
 **Dikembangkan oleh [JhopanStore](https://github.com/jhopan)**
 
-© 2026 JhopanStore. Dibangun dengan bantuan AI (Hermes Agent).
+© 2026 JhopanStore
