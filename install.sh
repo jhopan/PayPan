@@ -320,13 +320,18 @@ menu() {
 #   "${SERVICE}-tunnel"   (dibuat installer ini)
 #   "cloudflared-${SERVICE}" (setup manual / pola cloudflared standar)
 tunnel_service() {
+  # CATATAN: grep -q di pipeline berisiko SIGPIPE (exit 141) saat match — awk dibunuh
+  # setelah grep menemukan match pertama. Pakai grep biasa (baca semua output).
+  local found=""
+  local units
+  units="$(systemctl list-unit-files --no-legend 2>/dev/null | awk '{print $1}')" || true
   for c in "${SERVICE}-tunnel" "cloudflared-${SERVICE}"; do
-    if systemctl list-unit-files --no-legend 2>/dev/null | awk '{print $1}' | grep -qx "$c.service"; then
-      echo "$c"
-      return 0
+    if [[ "$units" == *"$c.service"* ]]; then
+      found="$c"
+      break
     fi
   done
-  echo ""
+  echo "$found"
 }
 
 tunnel_menu() {
