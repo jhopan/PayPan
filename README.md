@@ -52,10 +52,11 @@ curl -fsSL https://raw.githubusercontent.com/jhopan/PayPan/master/install.sh | b
 
 Installer otomatis: cek dependencies → download binary siap pakai dari GitHub Releases → systemd service → setup QRIS → pilih tunnel (Cloudflare/ngrok/Caddy/Nginx) → pasang menu kontrol `paypan`.
 
-Setelah terpasang, kontrol kapan saja:
+Setelah terpasang, ketik `paypan` di terminal mana pun (auto-buka menu):
 
-```bash
-sudo paypan          # menu: start/stop/restart/log/update/uninstall + tunnel
+```
+sudo paypan          # start/stop/restart/log/update/uninstall + tunnel
+sudo paypan install  # jalankan ulang installer (repair)
 ```
 
 ## Setup manual (tanpa installer)

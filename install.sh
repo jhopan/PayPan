@@ -272,6 +272,14 @@ EOF
 }
 
 # ---------- menu ----------
+# patch_menu_entry <file>: ubah salinan installer supaya `paypan` (tanpa argumen)
+# langsung buka menu, bukan jalanin installer lagi. Murni sed (no python dependency).
+patch_menu_entry() {
+  local f="$1"
+  sed -i 's|^main "\$@"$|if [[ $# -eq 0 ]]; then menu; else main "$@"; fi|' "$f"
+  grep -q 'if \[\[ \$# -eq 0 \]\]; then menu' "$f" && say "Menu auto-aktif: ketik ${C}paypan${R} di terminal mana pun." || warn "patch menu gagal (jalankan manual: paypan install)"
+}
+
 menu() {
   while true; do
     echo
@@ -363,12 +371,14 @@ main() {
   systemctl is-active --quiet "${SERVICE}" && say "Paypan jalan: http://127.0.0.1:${PORT}" || die "Server gagal start — cek: journalctl -u ${SERVICE}"
   setup_tunnel
 
-  # shortcut `paypan` di PATH
-  ln -sf "$0" /usr/local/bin/paypan 2>/dev/null || cp "$0" /usr/local/bin/paypan
+  # shortcut `paypan` di PATH: salin installer ke /usr/local/bin (bukan symlink ke
+  # file sementara curl|bash), lalu sedikit patch supaya langsung buka menu
+  install -m 755 "$0" /usr/local/bin/paypan
+  patch_menu_entry /usr/local/bin/paypan
 
   echo
   say -e "Selesai! Web admin: ${C}http://localhost:${PORT}/admin${R} (default admin/admin123 — SEGERA GANTI)"
-  say "Menu kontrol kapan saja: jalankan ${C}paypan${R} (atau bash install.sh)"
+  say "Menu kontrol kapan saja: ketik ${C}paypan${R} di terminal mana pun (auto-buka menu)"
   say "Data DB: ${DATA_DIR}/paypan.db  |  Binary: ${BIN}"
 }
 
