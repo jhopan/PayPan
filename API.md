@@ -99,7 +99,7 @@ Status yang mungkin:
 |---|---|
 | `pending` | menunggu pembayaran (max 5 menit) |
 | `paid` | lunas — notifikasi pembayaran diterima & dicocokkan |
-| `expired` | hangus (5 menit lewat tanpa bayar) — kode balik ke pool |
+| `expired` | hangus (5 menit lewat tanpa bayar) — kode balik ke pool setelah cooldown 2 jam |
 | `refunded` | dana sudah dikembalikan manual oleh merchant |
 
 Cara terbaik tahu invoice lunas **bukan polling**, tapi **webhook** (bagian 5). Polling hanya cadangan.
@@ -177,7 +177,7 @@ def verify(body_bytes: bytes, signature: str, secret: str) -> bool:
 | 404 | Invoice/order tidak ditemukan |
 | 405 | HTTP method salah |
 | 409 | Aksi bentrok dengan status (mis. cancel invoice paid) |
-| 429 | Rate limit |
+| 429 | Rate limit (60 req/menit) atau lebih dari 50 invoice pending aktif dari token yang sama |
 | 503 | Semua kode unik sedang dipakai — coba lagi beberapa detik |
 
 ---

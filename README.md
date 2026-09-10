@@ -23,7 +23,7 @@ Webhook (site lain) ◄───────────────────
 - **QRIS dinamis dari statis** — inject tag 54 (nominal) + recompute CRC16 ke payload QRIS statis
 - **Kode unik per level harga** — 1000→1001, 2000→2001; total diklaim eksklusif (UNIQUE partial index), race-proof
 - **Match exact** — notif `amount` dicocokkan ke satu order pending; idempoten
-- **Expiry 5 menit** + cooldown kode 24 jam
+- **Expiry 5 menit** + cooldown kode 2 jam (kode paid terpakai permanen) + limit 50 pending/token + QRIS hash pinning anti-tamper
 - **Web admin** (`/admin`) — Dashboard, Kasir, Aplikasi & Token (scope per-app), Log, Laporan (rekap bulanan/harian + purge), Konfigurasi
 - **Webhook** — POST `order.paid` + HMAC-SHA256 signature + retry
 - **Telegram notify** — LUNAS / unmatched, multi-chat, retry
