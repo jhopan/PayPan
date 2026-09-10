@@ -44,7 +44,21 @@ Webhook (site lain) ◄───────────────────
 | `/admin/kasir` | session admin | kasir (input nominal → QR) |
 | `/admin` | session | dashboard admin |
 
-## Setup (lokal)
+## Install 1 perintah (Linux VPS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jhopan/PayPan/master/install.sh | bash
+```
+
+Installer otomatis: cek dependencies → download binary siap pakai dari GitHub Releases → systemd service → setup QRIS → pilih tunnel (Cloudflare/ngrok/Caddy/Nginx) → pasang menu kontrol `paypan`.
+
+Setelah terpasang, kontrol kapan saja:
+
+```bash
+sudo paypan          # menu: start/stop/restart/log/update/uninstall + tunnel
+```
+
+## Setup manual (tanpa installer)
 
 ```bash
 # 1. siapkan payload QRIS statis (scan QR lo, simpan raw text)
@@ -65,14 +79,7 @@ Binary Linux/Windows otomatis di-build oleh GitHub Actions:
 
 ## Deploy (production VPS)
 
-```bash
-# download binary dari release, lalu:
-tar xzf paypan-linux-amd64.tar.gz
-chmod +x paypan-linux-amd64
-mkdir -p /var/lib/paypan
-cp qris_base.txt /var/lib/paypan/   # payload QRIS statis
-./paypan-linux-amd64 -addr :9090 -db /var/lib/paypan/paypan.db
-```
+**Cara termudah:** installer di atas (1 perintah) — sudah termasuk systemd + tunnel + menu kontrol.
 
 Checklist production:
 
