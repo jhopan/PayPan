@@ -105,5 +105,7 @@ func initDB(path string) (*sql.DB, error) {
 	if whSec == 0 {
 		db.Exec("ALTER TABLE webhooks ADD COLUMN secret TEXT")
 	}
+	// backfill: webhook lama tanpa secret (dibuat sebelum kolom ada) diisi otomatis
+	db.Exec("UPDATE webhooks SET secret=? WHERE secret IS NULL OR secret=''", genToken())
 	return db, nil
 }

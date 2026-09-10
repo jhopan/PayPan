@@ -419,7 +419,8 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		case "wh_add":
 			u := strings.TrimSpace(r.FormValue("url"))
 			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
-				s.db.Exec("INSERT INTO webhooks(app_rowid,url,active,created_at) VALUES((SELECT COALESCE(MAX(rowid),0) FROM apps),?,1,strftime('%s','now'))", u)
+				// secret webhook selalu diset saat pembuatan (HMAC per-webhook)
+				s.db.Exec("INSERT INTO webhooks(app_rowid,url,secret,active,created_at) VALUES((SELECT COALESCE(MAX(rowid),0) FROM apps),?,?,1,strftime('%s','now'))", u, genToken())
 				s.audit(actor, "webhook.add", u)
 				flash = "Webhook ditambahkan"
 			} else {

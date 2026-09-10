@@ -45,15 +45,27 @@ func listApps(db *sql.DB) []appRow {
 	return out
 }
 
+// genToken: 16 karakter acak, campuran huruf kecil + besar + angka (crypto/rand).
+// Modulo-rejection biar distribusi benar-benar merata.
 func genToken() string {
-	b := make([]byte, 24)
-	rand.Read(b)
-	const hx = "abcdefghijklmnopqrstuvwxyz0123456789"
-	out := make([]byte, len(b))
-	for i, v := range b {
-		out[i] = hx[int(v)%len(hx)]
+	const cs = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	out := make([]byte, 16)
+	for i := range out {
+		out[i] = cs[randInt(len(cs))]
 	}
 	return "pp_" + string(out)
+}
+
+// randInt: int acak [0,n) tanpa bias modulo (rejection sampling).
+func randInt(n int) int {
+	b := make([]byte, 1)
+	for {
+		rand.Read(b)
+		v := int(b[0])
+		if v < 256-(256%n) {
+			return v % n
+		}
+	}
 }
 
 // authScope: token valid + scope cocok + rate limit per token
