@@ -1,0 +1,116 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  VERSION: 1.1.1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test build (linux + windows)
+        run: |
+          GOOS=linux   GOARCH=amd64 go build -o dist/paypan-linux-amd64   .
+          GOOS=windows GOARCH=amd64 go build -o dist/paypan-windows-amd64.exe .
+
+      - name: Smoke test binary
+        run: |
+          ./dist/paypan-linux-amd64 --help 2>&1 | head -3 || true
+          file dist/paypan-linux-amd64 | grep -q "ELF 64-bit" && echo "linux binary OK"
+          file dist/paypan-windows-amd64.exe | grep -q "MS Windows" && echo "windows binary OK"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paypan-${{ env.VERSION }}
+          path: |
+            dist/paypan-linux-amd64
+            dist/paypan-windows-amd64.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/heads/master')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: paypan-${{ env.VERSION }}
+          path: dist
+
+      - name: Compress
+        run: |
+          cd dist
+          tar czf paypan-linux-amd64.tar.gz paypan-linux-amd64
+          sha256sum paypan-linux-amd64 paypan-windows-amd64.exe > checksums.txt
+          cd ..
+
+      - name: Update rolling release
+        run: |
+          gh release delete v${{ env.VERSION }} --yes 2>/dev/null || true
+          git push origin :refs/tags/v${{ env.VERSION }} 2>/dev/null || true
+          gh release create v${{ env.VERSION }} \
+            dist/paypan-linux-amd64.tar.gz \
+            dist/paypan-windows-amd64.exe \
+            dist/checksums.txt \
+            --title "Paypan Server v${{ env.VERSION }}" \
+            --latest \
+            --notes "$(cat <<'EOF'
+          ## Paypan Server v1.1.1
+
+          Binary server payment gateway QRIS (Go, single file, SQLite murni tanpa CGO).
+
+          | File | Platform |
+          |---|---|
+          | `paypan-linux-amd64.tar.gz` | Linux 64-bit (VPS / systemd) |
+          | `paypan-windows-amd64.exe` | Windows 64-bit |
+          | `checksums.txt` | SHA256 semua binary |
+
+          ### Fitur
+          - QRIS statis → dinamis (inject tag 54 nominal + recompute CRC16)
+          - Kode unik per level harga: 1000→1001, 2000→2001 (klaim eksklusif, race-proof)
+          - Match exact + idempoten; unmatched tersimpan untuk reconcile manual
+          - Expiry 5 menit + cooldown kode 2 jam (kode paid terpakai permanen)
+          - Limit 50 invoice pending per token + rate limit 60 req/menit/token
+          - QRIS hash pinning: anti-tamper `qris_base.txt` + alarm Telegram
+          - Web admin: Dashboard, Kasir, Aplikasi & Token (scope per-app), Log, Laporan, Konfigurasi
+          - Webhook `order.paid` + HMAC-SHA256 per-webhook secret + retry
+          - Notifikasi Telegram multi-chat + retry + alert kegagalan
+          - Backup DB otomatis tiap 6 jam (rotasi 28 file)
+
+          ### Deploy cepat (Linux VPS)
+          ```bash
+          tar xzf paypan-linux-amd64.tar.gz
+          chmod +x paypan-linux-amd64
+          # QRIS statis payload di file qris_base.txt (atau upload via web admin)
+          ./paypan-linux-amd64 -addr :9090 -db /var/lib/paypan/paypan.db
+          ```
+
+          Login admin default: `admin` / `admin123` — **WAJIB ganti setelah login pertama**
+          (menu Konfigurasi). Token `master` bawaan juga wajib di-rotate dari menu Aplikasi.
+
+          Lengkapnya lihat [API.md](https://github.com/jhopan/PayPan/blob/master/API.md) dan [README.md](https://github.com/jhopan/PayPan#readme).
+          EOF
+          )"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
