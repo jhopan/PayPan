@@ -288,8 +288,10 @@ menu() {
     echo -e "${C}╚══════════════════════════════════════╝${R}"
     local status="STOPPED"
     systemctl is-active --quiet "${SERVICE}" && status="RUNNING"
+    local tsvc
+    tsvc="$(tunnel_service)"
     local tunnel_status="OFF"
-    systemctl is-active --quiet "${SERVICE}-tunnel" 2>/dev/null && tunnel_status="ON"
+    [[ -n "$tsvc" ]] && systemctl is-active --quiet "$tsvc" 2>/dev/null && tunnel_status="ON"
     echo -e "  Status server : ${status}   |  Tunnel: ${tunnel_status}"
     echo
     echo "   1) Start           5) Log live (journalctl -f)"
@@ -314,13 +316,32 @@ menu() {
   done
 }
 
+# tunnel_service: cari nama unit tunnel yang terpasang — support dua konvensi nama:
+#   "${SERVICE}-tunnel"   (dibuat installer ini)
+#   "cloudflared-${SERVICE}" (setup manual / pola cloudflared standar)
+tunnel_service() {
+  for c in "${SERVICE}-tunnel" "cloudflared-${SERVICE}"; do
+    if systemctl list-unit-files --no-legend 2>/dev/null | awk '{print $1}' | grep -qx "$c.service"; then
+      echo "$c"
+      return 0
+    fi
+  done
+  echo ""
+}
+
 tunnel_menu() {
+  local tsvc
+  tsvc="$(tunnel_service)"
+  if [[ -z "$tsvc" ]]; then
+    warn "tunnel belum terpasang (install ulang, pilih tunnel)."
+    return
+  fi
   read -r -p "Tunnel action [start/stop/restart/status]: " t
   case "$t" in
-    start)   systemctl start "${SERVICE}-tunnel" 2>/dev/null && say "tunnel started." || warn "tunnel belum terpasang (install ulang, pilih tunnel)." ;;
-    stop)    systemctl stop "${SERVICE}-tunnel" 2>/dev/null && say "tunnel stopped." ;;
-    restart) systemctl restart "${SERVICE}-tunnel" 2>/dev/null && say "tunnel restarted." ;;
-    status)  systemctl status "${SERVICE}-tunnel" --no-pager -l 2>/dev/null || warn "tunnel belum terpasang." ;;
+    start)   systemctl start "$tsvc" && say "tunnel started." ;;
+    stop)    systemctl stop "$tsvc" && say "tunnel stopped." ;;
+    restart) systemctl restart "$tsvc" && say "tunnel restarted." ;;
+    status)  systemctl status "$tsvc" --no-pager -l ;;
     *) warn "?" ;;
   esac
 }
