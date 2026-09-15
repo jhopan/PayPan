@@ -107,6 +107,8 @@ func main() {
 		s.handleQR(w, r)
 	})
 	// admin web
+	mux.HandleFunc("/static/", s.staticHandler)
+	mux.HandleFunc("/favicon.ico", s.faviconHandler)
 	mux.HandleFunc("/admin/login", s.handleLogin)
 	mux.HandleFunc("/admin/logout", s.handleLogout)
 	mux.HandleFunc("/admin/apps", s.handleAdminApps)

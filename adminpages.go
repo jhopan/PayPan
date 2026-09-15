@@ -16,16 +16,32 @@ import (
 var staticFS embed.FS
 
 func (s *srv) staticHandler(w http.ResponseWriter, r *http.Request) {
-	// belokkan ke embedded static (css/js admin)
+	// belokkan ke embedded static (css/js admin + logo/favicon)
 	path := strings.TrimPrefix(r.URL.Path, "/static/")
 	b, err := staticFS.ReadFile("static/" + path)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	if strings.HasSuffix(path, ".css") {
+	switch {
+	case strings.HasSuffix(path, ".css"):
 		w.Header().Set("Content-Type", "text/css")
+	case strings.HasSuffix(path, ".png"):
+		w.Header().Set("Content-Type", "image/png")
 	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(b)
+}
+
+// faviconHandler: serve logo_paypan sebagai /favicon.ico juga (single source).
+func (s *srv) faviconHandler(w http.ResponseWriter, r *http.Request) {
+	b, err := staticFS.ReadFile("static/favicon-32.png")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write(b)
 }
 
@@ -62,6 +78,8 @@ func (s *srv) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginHTML() string { return `<!doctype html><html lang="id"><head><meta charset="utf-8">
+<link rel="icon" type="image/png" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/favicon-180.png">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — Paypan</title>
 <style>body{font-family:system-ui;background:#f2f4f8;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}
 .c{background:#fff;padding:36px;border-radius:16px;box-shadow:0 2px 16px rgba(0,0,0,.09);width:340px}
@@ -75,7 +93,7 @@ button{width:100%;padding:11px;background:#1a7f37;color:#fff;border:0;border-rad
 button:hover{background:#166f30}
 .e{color:#b42318;font-size:14px;background:#fee4e2;padding:8px 12px;border-radius:8px;margin-bottom:10px}
 .hint{color:#667085;font-size:12px;margin-top:14px;text-align:center}</style></head><body><div class="c">
-<div class="logo"><div class="dot">P</div><div><b>Paypan Admin</b><small>by JhopanStore</small></div></div>
+<div class="logo"><img src="/static/logo_paypan_tight.png" alt="" style="width:44px;height:44px;border-radius:12px"><div><b>Paypan Admin</b><small>by JhopanStore</small></div></div>
 {{if .}}<p class="e">{{.}}</p>{{end}}
 <form method="post">
 <label>Username</label><input type="text" name="user" placeholder="username" autofocus autocomplete="username">
@@ -96,6 +114,8 @@ func (s *srv) handleLogout(w http.ResponseWriter, r *http.Request) {
 // ---------- admin pages ----------
 
 var adminTmpl = template.Must(template.New("a").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
+<link rel="icon" type="image/png" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/favicon-180.png">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — Paypan</title>
 <style>
 *{box-sizing:border-box}
@@ -151,7 +171,7 @@ form.inline{display:inline}
 </style></head><body>
 <div class="layout">
 <div class="sidebar">
-<div class="brand"><div class="dot">P</div><div><b>Paypan</b><small>by JhopanStore</small></div></div>
+<div class="brand"><img src="/static/logo_paypan_tight.png" alt="" style="width:36px;height:36px;border-radius:10px;flex-shrink:0"><div><b>Paypan</b><small>by JhopanStore</small></div></div>
 <div class="menu">
 <a href="/admin" class="{{if eq .Tab "dash"}}on{{end}}"><span class="ico">▤</span> Dashboard</a>
 <a href="/admin/kasir" class="{{if eq .Tab "kasir"}}on{{end}}"><span class="ico">▣</span> Kasir</a>
