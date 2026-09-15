@@ -62,7 +62,7 @@ sudo menupaypan install  # jalankan ulang installer (repair)
 ## Setup (lokal)
 
 ```bash
-# 1. siapkan payload QRIS statis (scan QR lo, simpan raw text)
+# 1. siapkan payload QRIS statis (scan QR kamu, simpan raw text)
 echo "000201010211..." > qris_base.txt
 
 # 2. build & jalankan

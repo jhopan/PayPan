@@ -4,7 +4,7 @@
  * SETUP (sekali saja):
  * 1. Buat spreadsheet baru di Google Sheets, beri nama apa saja (mis. "PayPan Backup")
  * 2. Extensions → Apps Script
- * 3. Paste seluruh file ini, ganti SECRET di bawah dengan secret pilihan lo
+ * 3. Paste seluruh file ini, ganti SECRET di bawah dengan secret pilihan kamu
  *    (harus sama dengan yang di admin PayPan → Konfigurasi → Backup Google Sheets)
  * 4. Deploy → New deployment → Web app:
  *      - Execute as: Me

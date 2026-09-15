@@ -513,11 +513,11 @@ var r=new FileReader();r.onload=function(){document.getElementById('imgdata').va
 		// ---- Webhook ----
 		b.WriteString(`<div class="card"><h2>Webhook</h2>
 <p style="font-size:13px;color:#344054;margin:4px 0 10px;line-height:1.7">
-Webhook = PayPan otomatis mengabari website/bot lo saat ada invoice <b>lunas</b>.<br>
+Webhook = PayPan otomatis mengabari website/bot kamu saat ada invoice <b>lunas</b>.<br>
 <b>Cara menambahkan:</b><br>
-1. Siapkan endpoint di website/bot lo (harus menerima <code>POST</code>) — contoh <code>https://website-anda/api/webhook</code><br>
+1. Siapkan endpoint di website/bot kamu (harus menerima <code>POST</code>) — contoh <code>https://website-anda/api/webhook</code><br>
 2. Paste URL-nya di kolom bawah → <b>Tambah</b> — PayPan bikin secret HMAC otomatis untuk webhook itu<br>
-3. Copy secret-nya (tampilkan di bawah) → simpan di website/bot lo untuk verifikasi signature<br>
+3. Copy secret-nya (tampilkan di bawah) → simpan di website/bot kamu untuk verifikasi signature<br>
 4. Selesai — setiap invoice lunas, PayPan POST data + signature ke URL itu (retry 2x jika gagal)</p>
 <p style="font-size:12px;color:#98a2b3;margin:0 0 10px">Verifikasi di sisi penerima: <code>hex(HMAC-SHA256(secret, raw_body))</code> harus sama dengan header <code>X-Paypan-Signature</code>. Contoh kode ada di <a href="https://github.com/jhopan/PayPan/blob/master/API.md" target="_blank">API.md</a>.</p>`)
 		hooks := s.listWebhooks()
