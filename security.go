@@ -3,8 +3,6 @@ package main
 import (
 	"net/http"
 	"os"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -135,32 +133,19 @@ func apiJanitorWorker() {
 
 // ---------- backup DB otomatis ----------
 
-// backupWorker: copy paypan.db tiap 6 jam ke folder backup/ (maks 28 file).
+// backupWorker: copy paypan.db tiap 1 JAM ke file FIXED backup/paypan-hourly.db
+// (OVERWRITE, bukan nambah — hemat disk, tanpa akumulasi file).
+// Fallback riwayat: tombol "Buat Backup Sekarang" di web admin + backup manual.
+// WAL checkpoint dulu biar file konsisten.
 func (s *srv) backupWorker(dbPath string) {
-	for range time.Tick(6 * time.Hour) {
+	for range time.Tick(1 * time.Hour) {
 		_ = os.MkdirAll("backup", 0755)
-		name := "backup/paypan-" + time.Now().Format("2006-01-02-1504") + ".db"
-		// WAL checkpoint dulu biar file konsisten
 		s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
 		src, err := os.ReadFile(dbPath)
 		if err != nil {
 			continue
 		}
-		os.WriteFile(name, src, 0600)
-		// buang backup lama, sisakan 28
-		files, _ := os.ReadDir("backup")
-		var names []string
-		for _, f := range files {
-			if strings.HasPrefix(f.Name(), "paypan-") {
-				names = append(names, f.Name())
-			}
-		}
-		if len(names) > 28 {
-			sort.Strings(names)
-			for _, f := range names[:len(names)-28] {
-				os.Remove("backup/" + f)
-			}
-		}
+		os.WriteFile("backup/paypan-hourly.db", src, 0600)
 	}
 }
 

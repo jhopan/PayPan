@@ -189,7 +189,7 @@ func (s *srv) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
 			}
 			b.WriteString(`</table>`)
 		}
-		b.WriteString(`<p style="font-size:12px;color:#98a2b3;margin:8px 0 0">Backup otomatis tiap 6 jam (maks 28 file). Restore menimpa DB aktif — backup rollback dibuat otomatis sebelum restore, lalu server restart sesaat (±2 detik).</p></div>`)
+		b.WriteString(`<p style="font-size:12px;color:#98a2b3;margin:8px 0 0">Backup otomatis tiap 1 jam ke <code>paypan-hourly.db</code> (timpa — tidak menumpuk file). Restore menimpa DB aktif — backup rollback dibuat otomatis sebelum restore, lalu server restart sesaat (±2 detik).</p></div>`)
 		return template.HTML(b.String())
 	})
 }
