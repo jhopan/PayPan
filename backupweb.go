@@ -91,6 +91,9 @@ func (s *srv) createBackupNow() (string, error) {
 
 // handleAdminBackup: GET halaman backup + POST aksi (create/download/restore).
 func (s *srv) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSession(w, r) {
+		return
+	}
 	actor := s.adminUser()
 	flash := ""
 	if r.Method == http.MethodPost {
