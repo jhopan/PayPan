@@ -122,8 +122,8 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 
 	// daftar transaksi paid terbaru (bisa difilter per bulan) + sumber dari payments
 	filterMonth := r.URL.Query().Get("bulan")
-	listQ := `SELECT o.id, o.total, COALESCE((SELECT p.source FROM payments p WHERE p.amount=o.total ORDER BY p.received_at DESC LIMIT 1),''), o.paid_at
-		FROM orders o WHERE o.status='paid'`
+	listQ := `SELECT o.id, o.price, o.code, o.total, o.status, COALESCE((SELECT p.source FROM payments p WHERE p.amount=o.total ORDER BY p.received_at DESC LIMIT 1),''), o.paid_at, o.created_at
+	FROM orders o WHERE o.status='paid'`
 	var listArgs []any
 	if filterMonth != "" && len(filterMonth) == 7 {
 		start, err := time.Parse("2006-01", filterMonth)
@@ -136,14 +136,18 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 	txRows, err := s.db.Query(listQ, listArgs...)
 	type txRow struct {
 		ID, Source string
+		Price      int64
+		Code       int
 		Total      int64
+		Status     string
 		PaidAt     int64
+		CreatedAt  int64
 	}
 	var txs []txRow
 	if err == nil {
 		for txRows.Next() {
 			var t txRow
-			txRows.Scan(&t.ID, &t.Total, &t.Source, &t.PaidAt)
+			txRows.Scan(&t.ID, &t.Price, &t.Code, &t.Total, &t.Status, &t.Source, &t.PaidAt, &t.CreatedAt)
 			txs = append(txs, t)
 		}
 		txRows.Close()
@@ -197,7 +201,7 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		}
 		b.WriteString(`</table></div>`)
 
-		// daftar transaksi paid (filter per bulan)
+		// daftar transaksi paid (filter per bulan) — format penuh seperti dashboard
 		b.WriteString(`<div class="card"><h2>Transaksi Lunas</h2>
 <form method="get" style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
 <input type="month" name="bulan" value="` + (func() string {
@@ -208,12 +212,18 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		})() + `" style="margin:0">
 <button class="sec">Filter</button>
 <a class="pg" href="/admin/laporan" style="margin-left:8px">Semua</a></form>
-<table><tr><th>Waktu dibayar</th><th>Sumber</th><th>ID Order</th><th class="money">Total</th><th>Aksi</th></tr>`)
+<table><tr><th>Waktu</th><th>ID</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th>Aksi</th></tr>`)
 		if len(txs) == 0 {
-			b.WriteString(`<tr><td colspan="5" class="empty">Tidak ada transaksi lunas</td></tr>`)
+			b.WriteString(`<tr><td colspan="6" class="empty">Tidak ada transaksi lunas</td></tr>`)
 		}
 		for _, t := range txs {
-			b.WriteString(`<tr><td><small>` + timeFmt(t.PaidAt) + `</small></td><td>` + esc(t.Source) + `</td><td><code>` + t.ID + `</code></td><td class="money"><b>` + rp(t.Total) + `</b></td><td style="white-space:nowrap"><a class="pg" href="/admin/tx/` + t.ID + `">detail</a> <form method="post" class="inline" onsubmit="return confirm('Hapus transaksi ` + t.ID + `?')"><input type="hidden" name="act" value="del_tx"><input type="hidden" name="id" value="` + t.ID + `"><button class="del">Hapus</button></form></td></tr>`)
+			created := time.Unix(t.CreatedAt, 0).Format("02 Jan 2006 15:04")
+			b.WriteString(`<tr><td><small>` + created + `</small></td>` +
+				`<td><code>` + t.ID + `</code></td>` +
+				`<td><span class="badge paid">paid</span></td>` +
+				`<td class="money">` + rp(t.Price) + `</td>` +
+				`<td class="money"><b>` + rp(t.Total) + `</b></td>` +
+				`<td style="white-space:nowrap"><a class="pg" href="/admin/tx/` + t.ID + `">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table><small>Maks 50 transaksi terbaru.`)
 		if filterMonth != "" {
