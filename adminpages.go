@@ -511,22 +511,30 @@ var r=new FileReader();r.onload=function(){document.getElementById('imgdata').va
 <input name="tgchat" placeholder="123456789 (beberapa: pisah koma)" value="` + tgChat + `" style="width:100%">
 <button style="margin-top:10px">Simpan</button></form></div>`)
 		// ---- Webhook ----
-		b.WriteString(`<div class="card"><h2>Webhook</h2>`)
+		b.WriteString(`<div class="card"><h2>Webhook</h2>
+<p style="font-size:13px;color:#344054;margin:4px 0 10px;line-height:1.7">
+Webhook = PayPan otomatis mengabari website/bot lo saat ada invoice <b>lunas</b>.<br>
+<b>Cara menambahkan:</b><br>
+1. Siapkan endpoint di website/bot lo (harus menerima <code>POST</code>) — contoh <code>https://website-anda/api/webhook</code><br>
+2. Paste URL-nya di kolom bawah → <b>Tambah</b> — PayPan bikin secret HMAC otomatis untuk webhook itu<br>
+3. Copy secret-nya (tampilkan di bawah) → simpan di website/bot lo untuk verifikasi signature<br>
+4. Selesai — setiap invoice lunas, PayPan POST data + signature ke URL itu (retry 2x jika gagal)</p>
+<p style="font-size:12px;color:#98a2b3;margin:0 0 10px">Verifikasi di sisi penerima: <code>hex(HMAC-SHA256(secret, raw_body))</code> harus sama dengan header <code>X-Paypan-Signature</code>. Contoh kode ada di <a href="https://github.com/jhopan/PayPan/blob/master/API.md" target="_blank">API.md</a>.</p>`)
 		hooks := s.listWebhooks()
 		if len(hooks) > 0 {
-			b.WriteString(`<table><tr><th>URL</th><th>Status</th><th>Aksi</th></tr>`)
+			b.WriteString(`<table><tr><th>URL</th><th>Secret</th><th>Status</th><th>Aksi</th></tr>`)
 			for _, hk := range hooks {
 				st := `<span class="badge paid">aktif</span>`
 				if !hk.Active {
 					st = `<span class="badge expired">off</span>`
 				}
-				b.WriteString(`<tr><td><code>` + esc(hk.URL) + `</code></td><td>` + st + `</td>
+				b.WriteString(`<tr><td><code>` + esc(hk.URL) + `</code></td><td><code>` + esc(hk.Secret) + `</code></td><td>` + st + `</td>
 <td style="white-space:nowrap"><form method="post" class="inline"><input type="hidden" name="act" value="wh_toggle"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="sec">` + map[bool]string{true: "Matikan", false: "Aktifkan"}[hk.Active] + `</button></form>
 <form method="post" class="inline" onsubmit="return confirm('Hapus webhook ini?')"><input type="hidden" name="act" value="wh_del"><input type="hidden" name="id" value="` + itoa64(hk.ID) + `"><button class="del">Hapus</button></form></td></tr>`)
 			}
 			b.WriteString(`</table>`)
 		} else {
-			b.WriteString(`<p class="empty" style="color:#98a2b3;font-size:14px;margin:6px 0">Belum ada webhook</p>`)
+			b.WriteString(`<p class="empty" style="color:#98a2b3;font-size:14px;margin:6px 0">Belum ada webhook — tambahkan URL di bawah</p>`)
 		}
 		b.WriteString(`<form method="post" style="display:flex;gap:10px;margin-top:10px"><input type="hidden" name="act" value="wh_add">
 <input name="url" placeholder="https://website-anda/api/webhook" style="flex:1;margin:0" required>

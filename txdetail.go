@@ -11,11 +11,12 @@ import (
 type whRow struct {
 	ID     int64
 	URL    string
+	Secret string
 	Active bool
 }
 
 func (s *srv) listWebhooks() []whRow {
-	rows, err := s.db.Query("SELECT rowid,url,active FROM webhooks ORDER BY rowid")
+	rows, err := s.db.Query("SELECT rowid,url,secret,active FROM webhooks ORDER BY rowid")
 	if err != nil {
 		return nil
 	}
@@ -23,7 +24,7 @@ func (s *srv) listWebhooks() []whRow {
 	var out []whRow
 	for rows.Next() {
 		var w whRow
-		if rows.Scan(&w.ID, &w.URL, &w.Active) == nil {
+		if rows.Scan(&w.ID, &w.URL, &w.Secret, &w.Active) == nil {
 			out = append(out, w)
 		}
 	}
