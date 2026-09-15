@@ -68,13 +68,15 @@ func randInt(n int) int {
 	}
 }
 
-// authScope: token valid + scope cocok + rate limit per token
+// authScope: token valid + scope cocok + rate limit per token.
+// Rate-limit berbeda dari token salah: handler bisa mengirim HTTP 429.
 func (s *srv) authScope(r *http.Request, scope string) (string, bool) {
 	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if tok == "" {
 		return "", false
 	}
 	if !apiLimiter.allow(tok) {
+		r.Header.Set("X-Paypan-Rate-Limited", "1")
 		return "", false
 	}
 	var scopes string
@@ -89,6 +91,14 @@ func (s *srv) authScope(r *http.Request, scope string) (string, bool) {
 	var name string
 	s.db.QueryRow("SELECT name FROM apps WHERE token=?", tok).Scan(&name)
 	return name, true
+}
+
+// apiAuthStatus: pembeda token salah (401) dan limit terlewati (429).
+func apiAuthStatus(r *http.Request) int {
+	if r.Header.Get("X-Paypan-Rate-Limited") == "1" {
+		return http.StatusTooManyRequests
+	}
+	return http.StatusUnauthorized
 }
 
 // ---------- admin session ----------

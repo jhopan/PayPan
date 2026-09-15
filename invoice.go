@@ -75,7 +75,7 @@ func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := s.authScope(r, "order"); !ok {
-		respErr(w, 401, "unauthorized")
+		respErr(w, apiAuthStatus(r), "unauthorized")
 		return
 	}
 	var q orderReq
@@ -124,7 +124,7 @@ func (s *srv) handleInvoiceGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := s.authScope(r, "order"); !ok {
-		respErr(w, 401, "unauthorized")
+		respErr(w, apiAuthStatus(r), "unauthorized")
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/invoice/")
@@ -143,7 +143,7 @@ func (s *srv) handleInvoiceCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := s.authScope(r, "order"); !ok {
-		respErr(w, 401, "unauthorized")
+		respErr(w, apiAuthStatus(r), "unauthorized")
 		return
 	}
 	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/invoice/"), "/cancel")
@@ -170,7 +170,7 @@ func (s *srv) handleInvoiceRefund(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := s.authScope(r, "order"); !ok {
-		respErr(w, 401, "unauthorized")
+		respErr(w, apiAuthStatus(r), "unauthorized")
 		return
 	}
 	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/invoice/"), "/refund")

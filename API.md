@@ -24,7 +24,7 @@ Autentikasi: **Bearer token** di header `Authorization`. Token dibuat di admin �
 {"ok": false, "error": "pesan kesalahan"}
 ```
 
-Error HTTP yang mungkin: `400` (input salah), `401` (token salah/scope kurang), `404` (tidak ditemukan), `405` (method salah), `409` (status tidak sesuai — mis. cancel invoice yang sudah paid), `429` (rate limit, 60 req/menit/token), `503` (semua kode unik sedang dipakai, coba lagi).
+Error HTTP yang mungkin: `400` (input salah), `401` (token salah/scope kurang), `404` (tidak ditemukan), `405` (method salah), `409` (status tidak sesuai — mis. cancel invoice yang sudah paid), `429` (rate limit, 60 req/menit/token), `503` (semua kode unik sedang dipakai, coba lagi). Token salah selalu `401`; token valid yang melewati limit selalu `429`.
 
 ---
 
@@ -136,7 +136,15 @@ Syarat: status `paid`.
 
 ## 5. Webhook — notifikasi invoice lunas
 
-Daftarkan URL di admin → **Konfigurasi → Webhook**. Setiap invoice jadi `paid`, PayPan mengirim:
+### Cara menambahkan
+
+1. Siapkan endpoint penerima yang menerima `POST` JSON, misalnya `https://website-anda/api/webhook`.
+2. Buka PayPan admin → **Konfigurasi → Webhook**.
+3. Paste URL endpoint → klik **Tambah**.
+4. Salin secret yang tampil di kolom **Secret** untuk URL tersebut.
+5. Simpan secret itu di penerima dan verifikasi header HMAC sebelum memproses body.
+
+Setiap URL punya secret sendiri; jangan pakai token aplikasi sebagai webhook secret. Setiap invoice jadi `paid`, PayPan mengirim:
 
 ```
 POST <url-anda>
@@ -207,7 +215,20 @@ Praktik aman:
 
 ---
 
-## 8. Contoh lengkap
+## 8. Backup dari web admin
+
+Backup tidak memakai endpoint API integrator. Kelola dari web admin:
+
+- **Backup** → buat backup sekarang, download file SQLite, atau restore backup terpilih.
+- Backup otomatis setiap 1 jam menimpa `paypan-hourly.db`, jadi tidak menumpuk file.
+- Restore wajib ketik `RESTORE`; PayPan membuat rollback point dulu lalu restart otomatis.
+- **Konfigurasi → Backup Google Sheets** (opsional) → isi Web App URL + secret Apps Script, lalu klik push manual atau biarkan worker harian berjalan.
+
+Google Sheets disusun sebagai 1 spreadsheet per tahun, tab per bulan, blok per minggu di dalam tab bulan. Token aplikasi dan webhook secret tidak ikut dikirim ke Sheets.
+
+---
+
+## 9. Contoh lengkap
 
 Lihat [`examples/integrator.py`](examples/integrator.py) — fungsi siap pakai `create_invoice`, `get_invoice`, `cancel_invoice`, `wait_paid` + dokumentasi verifikasi webhook.
 

@@ -167,7 +167,7 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 	}
 	appName, ok := s.authScope(r, "notif")
 	if !ok {
-		s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		s.writeJSON(w, apiAuthStatus(r), map[string]string{"error": "unauthorized"})
 		return
 	}
 	_ = appName
@@ -257,7 +257,7 @@ func (s *srv) handleOrderCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := s.authScope(r, "order"); !ok {
-		s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
+		s.writeJSON(w, apiAuthStatus(r), map[string]string{"error": "unauthorized"})
 		return
 	}
 	s.createOrder(w, r)
