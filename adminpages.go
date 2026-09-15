@@ -443,6 +443,20 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			s.loadTGFromDB()
 			s.audit(actor, "telegram.update", "")
 			flash = "Telegram tersimpan"
+		case "ss_save":
+			s.db.Exec("INSERT INTO settings(key,value) VALUES('ss_url',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", strings.TrimSpace(r.FormValue("ssurl")))
+			s.db.Exec("INSERT INTO settings(key,value) VALUES('ss_secret',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", strings.TrimSpace(r.FormValue("sssecret")))
+			s.audit(actor, "sheets.config", "url+secret diperbarui")
+			flash = "Backup Sheets tersimpan"
+		case "ss_push":
+			msg, err := s.ssManual()
+			if err != nil {
+				flash = "Gagal: " + err.Error()
+				s.audit(actor, "sheets.gagal", err.Error())
+			} else {
+				flash = "Berhasil: " + msg
+				s.audit(actor, "sheets.backup", msg)
+			}
 		}
 	}
 	cur := s.readQrisBase()
@@ -516,6 +530,20 @@ var r=new FileReader();r.onload=function(){document.getElementById('imgdata').va
 		b.WriteString(`<form method="post" style="display:flex;gap:10px;margin-top:10px"><input type="hidden" name="act" value="wh_add">
 <input name="url" placeholder="https://website-anda/api/webhook" style="flex:1;margin:0" required>
 <button>Tambah</button></form></div>`)
+		// ---- Backup Google Sheets ----
+		var ssURL, ssSecret string
+		s.db.QueryRow("SELECT value FROM settings WHERE key='ss_url'").Scan(&ssURL)
+		s.db.QueryRow("SELECT value FROM settings WHERE key='ss_secret'").Scan(&ssSecret)
+		b.WriteString(`<div class="card"><h2>Backup Google Sheets</h2>
+<form method="post" style="max-width:520px"><input type="hidden" name="act" value="ss_save">
+<label style="font-size:13px;color:#344054;font-weight:600">Web App URL (Apps Script)</label>
+<input name="ssurl" placeholder="https://script.google.com/macros/s/.../exec" value="` + esc(ssURL) + `" style="width:100%">
+<label style="font-size:13px;color:#344054;font-weight:600">Secret</label>
+<input name="sssecret" placeholder="secret bersama (diset di Apps Script)" value="` + esc(ssSecret) + `" style="width:100%">
+<button style="margin-top:10px">Simpan</button></form>
+<form method="post" style="margin-top:8px"><input type="hidden" name="act" value="ss_push">
+<button class="sec">Backup ke Sheets sekarang (bulan berjalan)</button></form>
+<p style="font-size:12px;color:#98a2b3;margin:8px 0 0">Otomatis harian 23:55 untuk bulan sebelumnya. Struktur: 1 spreadsheet/bulan, sheet per minggu.</p></div>`)
 		// ---- Login Admin ----
 		b.WriteString(`<div class="card"><h2>Login Admin</h2>
 <form method="post" style="max-width:420px"><input type="hidden" name="act" value="pass">
