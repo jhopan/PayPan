@@ -158,6 +158,7 @@ form.inline{display:inline}
 <a href="/admin/apps" class="{{if eq .Tab "apps"}}on{{end}}"><span class="ico">⧉</span> Aplikasi &amp; Token</a>
 <a href="/admin/log" class="{{if eq .Tab "log"}}on{{end}}"><span class="ico">☰</span> Log</a>
 <a href="/admin/laporan" class="{{if eq .Tab "laporan"}}on{{end}}"><span class="ico">▦</span> Laporan</a>
+<a href="/admin/backup" class="{{if eq .Tab "backup"}}on{{end}}"><span class="ico">⛁</span> Backup</a>
 <a href="/admin/config" class="{{if eq .Tab "config"}}on{{end}}"><span class="ico">⚙</span> Konfigurasi</a>
 </div>
 <div class="foot">v1.1 · JhopanStore</div>

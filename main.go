@@ -38,6 +38,7 @@ func main() {
 		tgToken: *tgToken,
 		tgChat:  *tgChat,
 		httpc:   &http.Client{Timeout: 10 * time.Second},
+		dbPath:  *dbPath,
 	}
 
 	// QRIS hash pinning: verifikasi integritas payload saat startup
@@ -112,6 +113,7 @@ func main() {
 	mux.HandleFunc("/admin/config", s.handleAdminConfig)
 	mux.HandleFunc("/admin/log", s.handleAdminLog)
 	mux.HandleFunc("/admin/laporan", s.handleAdminLaporan)
+	mux.HandleFunc("/admin/backup", s.handleAdminBackup)
 	mux.HandleFunc("/admin/tx/", s.handleTxDetail)
 	mux.HandleFunc("/admin", s.handleAdminHome)
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {

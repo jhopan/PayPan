@@ -134,6 +134,7 @@ type srv struct {
 	tgToken string
 	tgChat  string
 	httpc   *http.Client
+	dbPath  string // path SQLite aktif (untuk backup/restore web)
 }
 
 func (s *srv) writeJSON(w http.ResponseWriter, code int, v any) {
