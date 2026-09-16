@@ -97,7 +97,7 @@ Checklist production:
 - Backup Google Sheets bersifat opsional; konfigurasi dari **Konfigurasi → Backup Google Sheets**
 - Verifikasi hash QRIS jalan: ubah `qris_base.txt` manual → server tolak invoice + kirim Telegram alarm
 
-Systemd unit contoh:
+Systemd unit contoh (env-style):
 
 ```ini
 [Unit]
@@ -105,7 +105,9 @@ Description=Paypan payment gateway
 After=network.target
 
 [Service]
-ExecStart=/opt/paypan/paypan-linux-amd64 -addr :9090 -db /var/lib/paypan/paypan.db
+Environment=PAYPAN_ADDR=:9090
+Environment=PAYPAN_DB=/var/lib/paypan/paypan.db
+ExecStart=/opt/paypan/paypan
 WorkingDirectory=/opt/paypan
 Restart=always
 User=paypan
@@ -116,6 +118,8 @@ ReadWritePaths=/var/lib/paypan
 [Install]
 WantedBy=multi-user.target
 ```
+
+Semua variabel env (port, path DB, tuning angka) — lihat [ENV.md](ENV.md).
 
 ## CI/CD
 

@@ -11,4 +11,8 @@ backup/
 
 # secrets
 *.secret
+AGENTS.md
+
+# local agent context files
+.agents/
 .gradle/

@@ -177,9 +177,11 @@ def verify(body_bytes: bytes, signature: str, secret: str) -> bool:
 
 ## 6. Rate limit & kode error
 
-- **60 request/menit** per token. Lebih dari itu → `429`.
+Nilai di bawah adalah default — bisa di-tuning via env tanpa build ulang (lihat [ENV.md](ENV.md)): `PAYPAN_API_MAX_PER_MIN`, `PAYPAN_PENDING_LIMIT`, `PAYPAN_LOGIN_MAX`.
+
+- **60 request/menit** per token (default). Lebih dari itu → `429`.
 - Maksimal **50 invoice pending aktif** per token (anti slot-filling). Invoice expired otomatis bebas dari hitungan.
-- Login admin: 5x/10 menit per IP.
+- Login admin: 5x/10 menit per IP (default).
 
 | HTTP | Arti |
 |---|---|
@@ -243,5 +245,18 @@ Alur minimal sebuah toko:
 6. PayPan match by total → invoice paid
 7. PayPan → webhook order.paid ke website → website tandai lunas
 ```
+
+---
+
+## 10. Konfigurasi runtime
+
+Ringkas dua lapis:
+
+| Lapis | Di mana | Kapan berlaku | Isi |
+|---|---|---|---|
+| Env | `PAYPAN_*` (lihat [ENV.md](ENV.md)) | Saat startup (restart) | Port, path DB, seed token, tuning angka |
+| Web admin | Konfigurasi → ... | Langsung (tersimpan DB) | QRIS, Telegram, webhook, Sheets, password admin, apps/token |
+
+DB selalu menang atas env/flag untuk konfigurasi harian.
 
 Langkah 5-7 butuh **app NotifListenPayment ter-install di HP merchant** (lihat repo [NotifListen-Payment](https://github.com/jhopan/NotifListen-Payment)) dan **GoPay Merchant terlogin** di HP tersebut.
