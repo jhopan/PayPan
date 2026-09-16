@@ -62,6 +62,7 @@ func main() {
 
 	// token/chat Telegram dari web (settings) menimpa flag — selalu DB yang menang
 	s.loadTGFromDB()
+	LoadTuningFromDB(db)
 	_ = s.token // legacy: auth lewat authScope (tabel apps)
 
 	mux := http.NewServeMux()

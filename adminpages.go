@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/skip2/go-qrcode"
@@ -478,6 +479,27 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 				flash = "Berhasil: " + msg
 				s.audit(actor, "sheets.backup", msg)
 			}
+		case "tuning":
+			expiry := r.FormValue("invoice_expiry")
+			cooldown := r.FormValue("code_cooldown")
+			var tmsg string
+			if n, err := strconv.ParseInt(expiry, 10, 64); err == nil && n >= 30 && n <= 3600 {
+				SetTuning(s.db, "tuning_invoice_expiry", n)
+				tmsg += "expiry=" + expiry + "s "
+			} else {
+				tmsg += "expiry INVALID (30-3600) "
+			}
+			if n, err := strconv.ParseInt(cooldown, 10, 64); err == nil && n >= 0 && n <= 86400 {
+				if n == 0 {
+					n = 1
+				}
+				SetTuning(s.db, "tuning_code_cooldown", n)
+				tmsg += "cooldown=" + cooldown + "s"
+			} else {
+				tmsg += "cooldown INVALID (0-86400)"
+			}
+			s.audit(actor, "tuning.set", tmsg)
+			flash = "Tuning disimpan: " + tmsg
 		}
 	}
 	cur := s.readQrisBase()
@@ -559,6 +581,16 @@ Webhook = PayPan otomatis mengabari website/bot kamu saat ada invoice <b>lunas</
 		b.WriteString(`<form method="post" style="display:flex;gap:10px;margin-top:10px"><input type="hidden" name="act" value="wh_add">
 <input name="url" placeholder="https://website-anda/api/webhook" style="flex:1;margin:0" required>
 <button>Tambah</button></form></div>`)
+		// ---- Tuning Invoice ----
+		b.WriteString(`<div class="card"><h2>Pengaturan Invoice</h2>
+<form method="post" style="max-width:420px"><input type="hidden" name="act" value="tuning">
+<label style="font-size:13px;color:#344054;font-weight:600">Invoice Expired (detik, 30-3600)</label>
+<input name="invoice_expiry" type="number" min="30" max="3600" value="` + strconv.FormatInt(tuning.InvoiceExpirySec(), 10) + `" style="width:100%">
+<p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Window waktu customer bayar. Lewat dari ini order expired dan kode masuk cooldown. Default 300 (5 menit).</p>
+<label style="font-size:13px;color:#344054;font-weight:600">Kode Cooldown (detik, 0-86400)</label>
+<input name="code_cooldown" type="number" min="0" max="86400" value="` + strconv.FormatInt(tuning.CodeCooldownSec(), 10) + `" style="width:100%">
+<p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Lama kode expired/refunded menunggu sebelum boleh dipakai lagi. Default 7200 (2 jam). Kode yang sudah PAID tidak pernah dipakai ulang.</p>
+<button style="margin-top:10px">Simpan</button></form></div>`)
 		// ---- Backup Google Sheets ----
 		var ssURL, ssSecret string
 		s.db.QueryRow("SELECT value FROM settings WHERE key='ss_url'").Scan(&ssURL)
