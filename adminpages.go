@@ -100,7 +100,7 @@ button:hover{background:#166f30}
 <label>Password</label><input type="password" name="pass" placeholder="password" autocomplete="current-password">
 <button>Login</button>
 </form>
-<div class="hint">Akses terbatas — dilarang dibagikan</div></div></body></html>` }
+<div class="hint">@Jhopanstore</div></div></body></html>` }
 
 
 func (s *srv) handleLogout(w http.ResponseWriter, r *http.Request) {
