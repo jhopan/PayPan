@@ -18,7 +18,6 @@ var limiter = &loginLimit{attempt: map[string][]time.Time{}}
 
 const (
 	llWindow = 10 * time.Minute
-	llMax    = 5
 )
 
 // allow: true kalau IP belum melewati batas
@@ -33,7 +32,7 @@ func (l *loginLimit) allow(ip string) bool {
 		}
 	}
 	l.attempt[ip] = keep
-	return len(keep) < llMax
+	return len(keep) < int(tuning.LoginMax())
 }
 
 func (l *loginLimit) hit(ip string) {
@@ -78,7 +77,6 @@ var apiLimiter = &apiLimit{hits: map[string]*tokenHits{}}
 
 const (
 	apiWindow = time.Minute
-	apiMax    = 60 // 60 req/menit per token — jauh di atas kebutuhan normal
 	// janitor: buang token yang tidak aktif, cegah map tumbuh tak terkendali
 	apiJanitorEvery = 10 * time.Minute
 	apiIdleEvict    = 30 * time.Minute
@@ -101,7 +99,7 @@ func (l *apiLimit) allow(key string) bool {
 	}
 	th.times = keep
 	th.last = now
-	if len(th.times) >= apiMax {
+	if len(th.times) >= int(tuning.APIMax()) {
 		return false
 	}
 	th.times = append(th.times, now)

@@ -66,11 +66,12 @@ func buildDynamicQR(base string, total int64) (string, error) {
 // Paid tidak boleh dipakai ulang (kode monoten naik). Expired/refunded cooldown 24 jam.
 func totalClaimed(db *sql.DB, total int64) bool {
 	var n int
+	cd := tuning.CodeCooldownSec()
 	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, total).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, total, cd, cd).Scan(&n)
 	return n > 0
 }
 
@@ -78,11 +79,12 @@ func totalClaimed(db *sql.DB, total int64) bool {
 // (agar urutan per level mulus: 1000->001,002... tidak lompat tanpa alasan)
 func codeUsedInPrice(db *sql.DB, price int64, code int) bool {
 	var n int
+	cd := tuning.CodeCooldownSec()
 	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, price, code).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, price, code, cd, cd).Scan(&n)
 	return n > 0
 }
 
@@ -106,21 +108,23 @@ func pickCodeTx(tx *sql.Tx, price int64) (int, bool) {
 
 func totalClaimedTx(tx *sql.Tx, total int64) bool {
 	var n int
+	cd := tuning.CodeCooldownSec()
 	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, total).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, total, cd, cd).Scan(&n)
 	return n > 0
 }
 
 func codeUsedInPriceTx(tx *sql.Tx, price int64, code int) bool {
 	var n int
+	cd := tuning.CodeCooldownSec()
 	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
 		OR status='paid'
-		OR (status='expired' AND expires_at > strftime('%s','now') - 7200)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - 7200))`, price, code).Scan(&n)
+		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, price, code, cd, cd).Scan(&n)
 	return n > 0
 }
 
@@ -315,7 +319,7 @@ func validatePrice(p int64) string {
 // createdBy = rowid aplikasi yang membuat (untuk limit pending-per-token), 0 = tidak diketahui.
 func (s *srv) claimOrder(price int64, createdBy int64) (oid string, code int, total int64, exp int64, err error) {
 	now := time.Now().Unix()
-	exp = now + 5*60
+	exp = now + tuning.InvoiceExpirySec()
 	for attempt := 0; attempt < 30; attempt++ {
 		tx, txErr := s.db.Begin()
 		if txErr != nil {

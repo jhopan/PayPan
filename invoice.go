@@ -93,7 +93,7 @@ func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 	if appRowid > 0 {
 		var pendingCount int
 		s.db.QueryRow("SELECT COUNT(*) FROM orders WHERE status='pending' AND created_by=?", appRowid).Scan(&pendingCount)
-		if pendingCount >= 50 {
+		if pendingCount >= int(tuning.PendingMax()) {
 			respErr(w, 429, "terlalu banyak invoice pending aktif dari aplikasi ini (maks 50)")
 			return
 		}

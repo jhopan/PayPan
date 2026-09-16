@@ -17,6 +17,8 @@ func main() {
 	tgChat := flag.String("tgchat", "", "telegram chat id (opsional)")
 	flag.Parse()
 
+	LoadTuningFromEnv()
+
 	// env mengisi default; flag eksplisit tetap menang (flag.Parse menimpa
 	// hanya jika user mengetik flag — jadi urutan: default env < flag).
 	// Untuk token: flag > env (seed master saja; auth asli = tabel apps).
