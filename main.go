@@ -10,15 +10,24 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8090", "listen address")
-	dbPath := flag.String("db", "paypan.db", "sqlite path")
+	addr := flag.String("addr", envOr("PAYPAN_ADDR", ":8090"), "listen address")
+	dbPath := flag.String("db", envOr("PAYPAN_DB", "paypan.db"), "sqlite path")
 	tok := flag.String("token", "", "bearer token utk /api/notif dan /api/order")
 	tgToken := flag.String("tgtoken", "", "telegram bot token (opsional)")
 	tgChat := flag.String("tgchat", "", "telegram chat id (opsional)")
 	flag.Parse()
 
+	// env mengisi default; flag eksplisit tetap menang (flag.Parse menimpa
+	// hanya jika user mengetik flag — jadi urutan: default env < flag).
+	// Untuk token: flag > env (seed master saja; auth asli = tabel apps).
 	if *tok == "" {
 		*tok = os.Getenv("PAYPAN_TOKEN")
+	}
+	if *tgToken == "" {
+		*tgToken = os.Getenv("PAYPAN_TGTOKEN")
+	}
+	if *tgChat == "" {
+		*tgChat = os.Getenv("PAYPAN_TGCHAT")
 	}
 	// token dari flag/env hanya dipakai sebagai token "master" awal;
 	// auth sesungguhnya = tabel apps (dikelola via web admin)
@@ -135,4 +144,12 @@ func main() {
 	go s.sheetWorker()
 	log.Printf("Paypan server listening %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, secureHeaders(mux)))
+}
+
+// envOr: baca env, fallback default. Env tidak pernah menimpa flag eksplisit.
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }

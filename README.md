@@ -67,7 +67,7 @@ sudo menupaypan install  # jalankan ulang installer (repair)
 # 1. siapkan payload QRIS statis (scan QR kamu, simpan raw text)
 echo "000201010211..." > qris_base.txt
 
-# 2. build & jalankan
+# 2. build & jalankan (atau pakai env: PAYPAN_ADDR, PAYPAN_DB — lihat ENV.md)
 go build -o paypan-server .
 ./paypan-server -addr :9090
 
