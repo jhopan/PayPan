@@ -24,15 +24,17 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test build (linux + windows)
+      - name: Test build (linux amd64/arm64 + windows)
         run: |
           GOOS=linux   GOARCH=amd64 go build -o dist/paypan-linux-amd64   .
+          GOOS=linux   GOARCH=arm64 go build -o dist/paypan-linux-arm64   .
           GOOS=windows GOARCH=amd64 go build -o dist/paypan-windows-amd64.exe .
 
       - name: Smoke test binary
         run: |
           ./dist/paypan-linux-amd64 --help 2>&1 | head -3 || true
-          file dist/paypan-linux-amd64 | grep -q "ELF 64-bit" && echo "linux binary OK"
+          file dist/paypan-linux-amd64 | grep -q "ELF 64-bit" && echo "linux amd64 binary OK"
+          file dist/paypan-linux-arm64 | grep -q "ELF 64-bit" && echo "linux arm64 binary OK"
           file dist/paypan-windows-amd64.exe | grep -q "MS Windows" && echo "windows binary OK"
 
       - name: Upload artifacts
@@ -41,6 +43,7 @@ jobs:
           name: paypan-${{ env.VERSION }}
           path: |
             dist/paypan-linux-amd64
+            dist/paypan-linux-arm64
             dist/paypan-windows-amd64.exe
 
   release:
@@ -62,7 +65,8 @@ jobs:
         run: |
           cd dist
           tar czf paypan-linux-amd64.tar.gz paypan-linux-amd64
-          sha256sum paypan-linux-amd64 paypan-windows-amd64.exe > checksums.txt
+          tar czf paypan-linux-arm64.tar.gz paypan-linux-arm64
+          sha256sum paypan-linux-amd64 paypan-linux-arm64 paypan-windows-amd64.exe > checksums.txt
           cd ..
 
       - name: Update rolling release
@@ -71,6 +75,7 @@ jobs:
           git push origin :refs/tags/v${{ env.VERSION }} 2>/dev/null || true
           gh release create v${{ env.VERSION }} \
             dist/paypan-linux-amd64.tar.gz \
+            dist/paypan-linux-arm64.tar.gz \
             dist/paypan-windows-amd64.exe \
             dist/checksums.txt \
             --title "Paypan Server v${{ env.VERSION }}" \
@@ -82,7 +87,8 @@ jobs:
 
           | File | Platform |
           |---|---|
-          | `paypan-linux-amd64.tar.gz` | Linux 64-bit (VPS / systemd) |
+          | `paypan-linux-amd64.tar.gz` | Linux 64-bit x86 (VPS / systemd) |
+          | `paypan-linux-arm64.tar.gz` | Linux 64-bit ARM (armbian / Raspberry Pi / STB) |
           | `paypan-windows-amd64.exe` | Windows 64-bit |
           | `checksums.txt` | SHA256 semua binary |
 
@@ -90,20 +96,22 @@ jobs:
           - QRIS statis → dinamis (inject tag 54 nominal + recompute CRC16)
           - Kode unik per level harga: 1000→1001, 2000→2001 (klaim eksklusif, race-proof)
           - Match exact + idempoten; unmatched tersimpan untuk reconcile manual
-          - Expiry 5 menit + cooldown kode 2 jam (kode paid terpakai permanen)
-          - Limit 50 invoice pending per token + rate limit 60 req/menit/token
+          - Expiry & cooldown kode bisa diatur dari web admin (default 5 menit / 2 jam; paid permanen)
+          - Limit pending per token + rate limit API, keduanya bisa di-tuning via env
+          - Konfigurasi runtime via env (PAYPAN_ADDR, PAYPAN_DB, PAYPAN_*) — lihat ENV.md
           - QRIS hash pinning: anti-tamper `qris_base.txt` + alarm Telegram
-          - Web admin: Dashboard, Kasir, Aplikasi & Token (scope per-app), Log, Laporan, Konfigurasi
-          - Webhook `order.paid` + HMAC-SHA256 per-webhook secret + retry
+          - Web admin: Dashboard, Kasir, Aplikasi & Token (scope per-app), Log, Laporan, Backup & Restore, Konfigurasi
+          - Webhook `order.paid` + HMAC-SHA256 per-webhook secret + retry 2x
           - Notifikasi Telegram multi-chat + retry + alert kegagalan
-          - Backup DB otomatis tiap 6 jam (rotasi 28 file)
+          - Backup DB otomatis tiap 1 jam (overwrite `paypan-hourly.db`, tidak menumpuk)
+          - Backup Google Sheets opsional (1 spreadsheet/tahun, tab per bulan, blok per minggu)
 
           ### Deploy cepat (Linux VPS)
           ```bash
           tar xzf paypan-linux-amd64.tar.gz
           chmod +x paypan-linux-amd64
           # QRIS statis payload di file qris_base.txt (atau upload via web admin)
-          ./paypan-linux-amd64 -addr :9090 -db /var/lib/paypan/paypan.db
+          PAYPAN_ADDR=:9090 PAYPAN_DB=/var/lib/paypan/paypan.db ./paypan-linux-amd64
           ```
 
           Login admin default: `admin` / `admin123` — **WAJIB ganti setelah login pertama**
