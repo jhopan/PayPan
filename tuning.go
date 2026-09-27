@@ -14,6 +14,7 @@ type TuningCfg struct {
 	mu             sync.RWMutex
 	InvoiceExpiry  int64 // detik window bayar invoice (default 300 = 5 menit)
 	CodeCooldown   int64 // detik cooldown kode expired/refunded (default 7200 = 2 jam)
+	PaidCooldown   int64 // detik sebelum kode paid boleh dipakai lagi (default 86400 = 24 jam)
 	PendingLimit   int64 // maks invoice pending per token (default 50)
 	APIMaxPerMin   int64 // rate limit API req/menit/token (default 60)
 	LoginMaxPerWin int64 // rate limit login per window IP (default 5)
@@ -22,6 +23,7 @@ type TuningCfg struct {
 var tuning = &TuningCfg{
 	InvoiceExpiry:  300,
 	CodeCooldown:   7200,
+	PaidCooldown:   86400,
 	PendingLimit:   50,
 	APIMaxPerMin:   60,
 	LoginMaxPerWin: 5,
@@ -33,6 +35,7 @@ func LoadTuningFromEnv() {
 	defer tuning.mu.Unlock()
 	tuning.InvoiceExpiry = envInt("PAYPAN_INVOICE_EXPIRY", tuning.InvoiceExpiry)
 	tuning.CodeCooldown = envInt("PAYPAN_CODE_COOLDOWN", tuning.CodeCooldown)
+	tuning.PaidCooldown = envInt("PAYPAN_PAID_COOLDOWN", tuning.PaidCooldown)
 	tuning.PendingLimit = envInt("PAYPAN_PENDING_LIMIT", tuning.PendingLimit)
 	tuning.APIMaxPerMin = envInt("PAYPAN_API_MAX_PER_MIN", tuning.APIMaxPerMin)
 	tuning.LoginMaxPerWin = envInt("PAYPAN_LOGIN_MAX", tuning.LoginMaxPerWin)
@@ -43,6 +46,7 @@ func LoadTuningFromDB(db *sql.DB) {
 	for key, setter := range map[string]func(int64){
 		"tuning_invoice_expiry": func(v int64) { tuning.InvoiceExpiry = v },
 		"tuning_code_cooldown":  func(v int64) { tuning.CodeCooldown = v },
+		"tuning_paid_cooldown":  func(v int64) { tuning.PaidCooldown = v },
 		"tuning_pending_limit":  func(v int64) { tuning.PendingLimit = v },
 		"tuning_api_max":        func(v int64) { tuning.APIMaxPerMin = v },
 		"tuning_login_max":      func(v int64) { tuning.LoginMaxPerWin = v },
@@ -65,6 +69,8 @@ func SetTuning(db *sql.DB, key string, val int64) {
 		tuning.InvoiceExpiry = val
 	case "tuning_code_cooldown":
 		tuning.CodeCooldown = val
+	case "tuning_paid_cooldown":
+		tuning.PaidCooldown = val
 	case "tuning_pending_limit":
 		tuning.PendingLimit = val
 	case "tuning_api_max":
@@ -78,6 +84,7 @@ func SetTuning(db *sql.DB, key string, val int64) {
 // Getters (thread-safe).
 func (t *TuningCfg) InvoiceExpirySec() int64 { t.mu.RLock(); defer t.mu.RUnlock(); return t.InvoiceExpiry }
 func (t *TuningCfg) CodeCooldownSec() int64  { t.mu.RLock(); defer t.mu.RUnlock(); return t.CodeCooldown }
+func (t *TuningCfg) PaidCooldownSec() int64  { t.mu.RLock(); defer t.mu.RUnlock(); return t.PaidCooldown }
 func (t *TuningCfg) PendingMax() int64       { t.mu.RLock(); defer t.mu.RUnlock(); return t.PendingLimit }
 func (t *TuningCfg) APIMax() int64           { t.mu.RLock(); defer t.mu.RUnlock(); return t.APIMaxPerMin }
 func (t *TuningCfg) LoginMax() int64         { t.mu.RLock(); defer t.mu.RUnlock(); return t.LoginMaxPerWin }

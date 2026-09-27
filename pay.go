@@ -63,15 +63,16 @@ func buildDynamicQR(base string, total int64) (string, error) {
 //   coba kode berikutnya (maks 20x). Tanpa mutex global, tanpa doa.
 
 // totalClaimed: true kalau total sudah dipakai order AKTIF (pending / paid / expired<24h / refunded<24h).
-// Paid tidak boleh dipakai ulang (kode monoten naik). Expired/refunded cooldown 24 jam.
+// Paid masuk cooldown 24 jam (tuning) lalu bebas lagi. Expired/refunded cooldown 2 jam (tuning).
 func totalClaimed(db *sql.DB, total int64) bool {
 	var n int
 	cd := tuning.CodeCooldownSec()
+	pcd := tuning.PaidCooldownSec()
 	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
-		OR status='paid'
+		OR (status='paid' AND COALESCE(paid_at, created_at) > strftime('%s','now') - ?)
 		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, total, cd, cd).Scan(&n)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, total, pcd, cd, cd).Scan(&n)
 	return n > 0
 }
 
@@ -80,11 +81,12 @@ func totalClaimed(db *sql.DB, total int64) bool {
 func codeUsedInPrice(db *sql.DB, price int64, code int) bool {
 	var n int
 	cd := tuning.CodeCooldownSec()
+	pcd := tuning.PaidCooldownSec()
 	db.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
-		OR status='paid'
+		OR (status='paid' AND COALESCE(paid_at, created_at) > strftime('%s','now') - ?)
 		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, price, code, cd, cd).Scan(&n)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, price, code, pcd, cd, cd).Scan(&n)
 	return n > 0
 }
 
@@ -109,22 +111,24 @@ func pickCodeTx(tx *sql.Tx, price int64) (int, bool) {
 func totalClaimedTx(tx *sql.Tx, total int64) bool {
 	var n int
 	cd := tuning.CodeCooldownSec()
+	pcd := tuning.PaidCooldownSec()
 	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE total=? AND (
 		status='pending'
-		OR status='paid'
+		OR (status='paid' AND COALESCE(paid_at, created_at) > strftime('%s','now') - ?)
 		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, total, cd, cd).Scan(&n)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, total, pcd, cd, cd).Scan(&n)
 	return n > 0
 }
 
 func codeUsedInPriceTx(tx *sql.Tx, price int64, code int) bool {
 	var n int
 	cd := tuning.CodeCooldownSec()
+	pcd := tuning.PaidCooldownSec()
 	tx.QueryRow(`SELECT COUNT(*) FROM orders WHERE price=? AND code=? AND (
 		status='pending'
-		OR status='paid'
+		OR (status='paid' AND COALESCE(paid_at, created_at) > strftime('%s','now') - ?)
 		OR (status='expired' AND expires_at > strftime('%s','now') - ?)
-		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, price, code, cd, cd).Scan(&n)
+		OR (status='refunded' AND COALESCE(paid_at, expires_at) > strftime('%s','now') - ?))`, price, code, pcd, cd, cd).Scan(&n)
 	return n > 0
 }
 

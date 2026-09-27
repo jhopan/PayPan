@@ -498,6 +498,16 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			} else {
 				tmsg += "cooldown INVALID (0-86400)"
 			}
+			pcd := r.FormValue("paid_cooldown")
+			if n, err := strconv.ParseInt(pcd, 10, 64); err == nil && n >= 0 && n <= 2592000 {
+				if n == 0 {
+					n = 1
+				}
+				SetTuning(s.db, "tuning_paid_cooldown", n)
+				tmsg += " paid=" + pcd + "s"
+			} else {
+				tmsg += " paid INVALID (0-2592000)"
+			}
 			s.audit(actor, "tuning.set", tmsg)
 			flash = "Tuning disimpan: " + tmsg
 		}
@@ -589,7 +599,10 @@ Webhook = PayPan otomatis mengabari website/bot kamu saat ada invoice <b>lunas</
 <p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Window waktu customer bayar. Lewat dari ini order expired dan kode masuk cooldown. Default 300 (5 menit).</p>
 <label style="font-size:13px;color:#344054;font-weight:600">Kode Cooldown (detik, 0-86400)</label>
 <input name="code_cooldown" type="number" min="0" max="86400" value="` + strconv.FormatInt(tuning.CodeCooldownSec(), 10) + `" style="width:100%">
-<p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Lama kode expired/refunded menunggu sebelum boleh dipakai lagi. Default 7200 (2 jam). Kode yang sudah PAID tidak pernah dipakai ulang.</p>
+<p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Lama kode expired/refunded menunggu sebelum boleh dipakai lagi. Default 7200 (2 jam).</p>
+<label style="font-size:13px;color:#344054;font-weight:600">Paid Cooldown (detik, 0-2592000)</label>
+<input name="paid_cooldown" type="number" min="0" max="2592000" value="` + strconv.FormatInt(tuning.PaidCooldownSec(), 10) + `" style="width:100%">
+<p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Lama kode dari transaksi PAID menunggu sebelum boleh dipakai invoice baru. Default 86400 (24 jam). Setelah lewat, dianggap mustahil masuk lagi (uang lama tidak mungkin datang setelah sehari).</p>
 <button style="margin-top:10px">Simpan</button></form></div>`)
 		// ---- Backup Google Sheets ----
 		var ssURL, ssSecret string

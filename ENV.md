@@ -23,6 +23,7 @@ default `:8090`.
 | `PAYPAN_TGCHAT` | — | Telegram chat id awal (opsional) |
 | `PAYPAN_INVOICE_EXPIRY` | `300` | Window bayar invoice (detik) |
 | `PAYPAN_CODE_COOLDOWN` | `7200` | Cooldown kode expired/refunded (detik) |
+| `PAYPAN_PAID_COOLDOWN` | `86400` | Cooldown kode paid sebelum dipakai lagi (detik) |
 | `PAYPAN_PENDING_LIMIT` | `50` | Maks invoice pending per token |
 | `PAYPAN_API_MAX_PER_MIN` | `60` | Rate limit API req/menit/token |
 | `PAYPAN_LOGIN_MAX` | `5` | Rate limit login per 10 menit per IP |
