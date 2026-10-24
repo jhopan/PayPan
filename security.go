@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -164,6 +165,7 @@ func apiJanitorWorker() {
 			}
 		}
 		sessions.mu.Unlock()
+		csrfJanitor()
 	}
 }
 
@@ -174,14 +176,67 @@ func apiJanitorWorker() {
 // Fallback riwayat: tombol "Buat Backup Sekarang" di web admin + backup manual.
 // WAL checkpoint dulu biar file konsisten.
 func (s *srv) backupWorker(dbPath string) {
+	// backup pertama langsung saat start (jangan tunggu 1 jam)
+	if err := s.writeHourlyBackup(); err != nil {
+		log.Println("backup awal gagal:", err)
+	}
 	for range time.Tick(1 * time.Hour) {
-		_ = os.MkdirAll("backup", 0755)
-		s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
-		src, err := os.ReadFile(dbPath)
-		if err != nil {
-			continue
+		if err := s.writeHourlyBackup(); err != nil {
+			log.Println("backup gagal:", err)
 		}
-		os.WriteFile("backup/paypan-hourly.db", src, 0600)
+	}
+}
+
+// writeHourlyBackup: snapshot konsisten + tulis ATOMIK.
+// VACUUM INTO menghasilkan file utuh walau DB sedang ditulis; lalu rename
+// atomik supaya backup lama tidak pernah tertimpa file setengah jadi.
+func (s *srv) writeHourlyBackup() error {
+	if err := os.MkdirAll("backup", 0755); err != nil {
+		return err
+	}
+	tmp := "backup/paypan-hourly.db.tmp"
+	final := "backup/paypan-hourly.db"
+	os.Remove(tmp)
+	if _, err := s.db.Exec("VACUUM INTO ?", tmp); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// retentionWorker: buang data lama supaya DB tidak tumbuh selamanya.
+// Default 90 hari, bisa diubah via env PAYPAN_RETENTION_DAYS.
+// Yang dihapus: payments, webhook_log, unmatched, dan order non-paid yang sudah lama.
+func (s *srv) retentionWorker() {
+	days := envInt("PAYPAN_RETENTION_DAYS", 90)
+	if days < 7 {
+		days = 7 // jangan pernah lebih agresif dari 7 hari
+	}
+	cutoff := func() int64 { return time.Now().AddDate(0, 0, -int(days)).Unix() }
+
+	run := func() {
+		c := cutoff()
+		if _, err := s.db.Exec("DELETE FROM payments WHERE received_at < ?", c); err != nil {
+			log.Println("retention payments:", err)
+		}
+		if _, err := s.db.Exec("DELETE FROM webhook_log WHERE at < ?", c); err != nil {
+			log.Println("retention webhook_log:", err)
+		}
+		if _, err := s.db.Exec("DELETE FROM unmatched WHERE received_at < ?", c); err != nil {
+			log.Println("retention unmatched:", err)
+		}
+		// order paid TIDAK dihapus (sumber laporan); hanya expired/refunded lama
+		if _, err := s.db.Exec("DELETE FROM orders WHERE status IN ('expired','refunded') AND COALESCE(paid_at,expires_at) < ?", c); err != nil {
+			log.Println("retention orders:", err)
+		}
+	}
+
+	run() // sekali saat start
+	for range time.Tick(24 * time.Hour) {
+		run()
 	}
 }
 

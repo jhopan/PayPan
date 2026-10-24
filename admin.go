@@ -142,8 +142,17 @@ func (ss *sessionStore) drop(tok string) {
 
 // adminPass baca password admin dari settings (default dibuat saat init)
 func (s *srv) adminPassCheck(input string) bool {
-	// constant-time compare: cegah timing side-channel
-	return subtle.ConstantTimeCompare([]byte(input), []byte(s.adminPass())) == 1
+	stored := s.adminPass()
+	// hash modern
+	if isHashedPassword(stored) {
+		return verifyPassword(input, stored)
+	}
+	// password lama (plaintext): bandingkan constant-time, lalu migrasi ke hash
+	if subtle.ConstantTimeCompare([]byte(input), []byte(stored)) == 1 {
+		s.setAdminPass(input) // upgrade transparan ke hash
+		return true
+	}
+	return false
 }
 func (s *srv) adminUser() string {
 	var p string
@@ -163,14 +172,26 @@ func (s *srv) adminPass() string {
 	var p string
 	s.db.QueryRow("SELECT value FROM settings WHERE key='admin_pass'").Scan(&p)
 	if p == "" {
-		p = "admin123" // default; WAJIB diganti via web
-		s.db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES('admin_pass','admin123')")
+		// default; WAJIB diganti via web. Disimpan sebagai hash.
+		h := hashPassword("admin123")
+		if h == "" {
+			h = "admin123"
+		}
+		s.db.Exec("INSERT OR IGNORE INTO settings(key,value) VALUES('admin_pass',?)", h)
+		p = h
 	}
 	return p
 }
 
 func (s *srv) setAdminPass(p string) {
-	s.db.Exec("INSERT INTO settings(key,value) VALUES('admin_pass',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", p)
+	// selalu simpan sebagai hash PBKDF2, bukan plaintext
+	v := p
+	if !isHashedPassword(p) {
+		if h := hashPassword(p); h != "" {
+			v = h
+		}
+	}
+	s.db.Exec("INSERT INTO settings(key,value) VALUES('admin_pass',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", v)
 }
 
 // middleware: cookie paypan_session wajib valid

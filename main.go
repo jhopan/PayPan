@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"flag"
 	"log"
 	"net/http"
@@ -80,7 +81,7 @@ func main() {
 		}
 	})
 	// kasir: bagian dari /admin/*
-	mux.HandleFunc("/admin/kasir", s.handleKasir)
+	mux.HandleFunc("/admin/kasir", s.requireAdminCSRF(s.handleKasir))
 	// API invoice terstandarisasi (untuk bot/website/integrasi)
 	mux.HandleFunc("/api/invoice", s.handleInvoiceCreate)
 	mux.HandleFunc("/api/invoice/", func(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +104,15 @@ func main() {
 			s.writeJSON(w, 401, map[string]string{"error": "unauthorized"})
 			return
 		}
+		// CSRF: form kasir kirim header X-CSRF-Token (fetch, bukan form biasa)
+		if r.Method == http.MethodPost {
+			ck, _ := r.Cookie(csrfCookie)
+			hdr := r.Header.Get("X-CSRF-Token")
+			if ck == nil || subtle.ConstantTimeCompare([]byte(hdr), []byte(ck.Value)) != 1 {
+				s.writeJSON(w, 403, map[string]string{"error": "csrf"})
+				return
+			}
+		}
 		// handleOrderCreate memeriksa scope token via authScope; untuk kasir
 		// (session), buat order langsung tanpa token check.
 		s.handleOrderCreateSession(w, r)
@@ -124,13 +134,13 @@ func main() {
 	mux.HandleFunc("/favicon.ico", s.faviconHandler)
 	mux.HandleFunc("/admin/login", s.handleLogin)
 	mux.HandleFunc("/admin/logout", s.handleLogout)
-	mux.HandleFunc("/admin/apps", s.handleAdminApps)
-	mux.HandleFunc("/admin/config", s.handleAdminConfig)
-	mux.HandleFunc("/admin/log", s.handleAdminLog)
-	mux.HandleFunc("/admin/laporan", s.handleAdminLaporan)
-	mux.HandleFunc("/admin/backup", s.handleAdminBackup)
-	mux.HandleFunc("/admin/tx/", s.handleTxDetail)
-	mux.HandleFunc("/admin", s.handleAdminHome)
+	mux.HandleFunc("/admin/apps", s.requireAdminCSRF(s.handleAdminApps))
+	mux.HandleFunc("/admin/config", s.requireAdminCSRF(s.handleAdminConfig))
+	mux.HandleFunc("/admin/log", s.requireAdminCSRF(s.handleAdminLog))
+	mux.HandleFunc("/admin/laporan", s.requireAdminCSRF(s.handleAdminLaporan))
+	mux.HandleFunc("/admin/backup", s.requireAdminCSRF(s.handleAdminBackup))
+	mux.HandleFunc("/admin/tx/", s.requireAdminCSRF(s.handleTxDetail))
+	mux.HandleFunc("/admin", s.requireAdminCSRF(s.handleAdminHome))
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", 302)
 	})
@@ -143,6 +153,7 @@ func main() {
 		w.Write([]byte("Paypan payment gateway OK\n"))
 	})
 
+	go s.retentionWorker()
 	go s.webhookWorker()
 	go s.expireWorker()
 	go s.backupWorker(*dbPath)

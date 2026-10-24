@@ -70,6 +70,7 @@ func (s *srv) appRowidByToken(authHeader string) int64 {
 
 // POST /api/invoice — buat invoice.
 func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
+	limitBody(w, r, maxBodyBytes)
 	if r.Method != http.MethodPost {
 		respErr(w, 405, "method not allowed")
 		return

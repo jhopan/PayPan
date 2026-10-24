@@ -49,6 +49,16 @@ func (s *srv) fireWebhooks(orderID string, total int64) {
 		},
 	})
 
+	// Cegah kirim dobel: hanya satu pemanggil yang boleh mengantrekan.
+	// (manualPaid + notif match bisa terjadi hampir bersamaan)
+	res, err := s.db.Exec("UPDATE orders SET webhook_fired=1 WHERE id=? AND webhook_fired=0", orderID)
+	if err != nil {
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return // sudah pernah diantrekan
+	}
+
 	// Masukkan ke antrean persisten: worker yang mengirim + retry.
 	// Ini menggantikan goroutine + time.Sleep supaya retry tidak hilang saat restart.
 	now := time.Now().Unix()

@@ -61,10 +61,20 @@ def api(path, body, token=None):
 jar = http.cookiejar.CookieJar()
 op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 op.open(BASE + "/admin/login", data=urllib.parse.urlencode({"user": "admin", "pass": "admin123"}).encode())
+op.open(BASE + "/admin")  # cookie CSRF
+
+
+def csrf():
+    for c in jar:
+        if c.name == "paypan_csrf":
+            return c.value
+    return ""
 
 
 def admin_post(data):
-    return op.open(BASE + "/admin", data=urllib.parse.urlencode(data).encode()).read().decode()
+    d = dict(data)
+    d["csrf_token"] = csrf()
+    return op.open(BASE + "/admin", data=urllib.parse.urlencode(d).encode()).read().decode()
 
 
 # ---------- 1. healthz ----------

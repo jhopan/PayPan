@@ -118,6 +118,14 @@ func initDBFromDSN(dsn string) (*sql.DB, error) {
 			return nil, err
 		}
 	}
+	var whFired int
+	db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name='webhook_fired'").Scan(&whFired)
+	if whFired == 0 {
+		if _, err := db.Exec("ALTER TABLE orders ADD COLUMN webhook_fired INTEGER NOT NULL DEFAULT 0"); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	var whSec int
 	db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('webhooks') WHERE name='secret'").Scan(&whSec)
 	if whSec == 0 {

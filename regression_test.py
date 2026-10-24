@@ -53,6 +53,14 @@ def api(path, body, token=None):
 jar = http.cookiejar.CookieJar()
 op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 op.open(BASE + "/admin/login", data=urllib.parse.urlencode({"user": "admin", "pass": "admin123"}).encode())
+op.open(BASE + "/admin")  # pastikan cookie CSRF terpasang
+
+
+def csrf():
+    for c in jar:
+        if c.name == "paypan_csrf":
+            return c.value
+    return ""
 
 # bersihkan state test
 db.execute("delete from orders"); db.execute("delete from unmatched")

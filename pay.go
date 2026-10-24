@@ -170,6 +170,7 @@ type notifReq struct {
 
 // POST /api/notif — dari device. Simpan payment -> coba match -> response.
 func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
+	limitBody(w, r, maxBodyBytes)
 	if r.Method != http.MethodPost {
 		s.writeJSON(w, 405, map[string]string{"error": "method"})
 		return

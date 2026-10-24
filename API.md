@@ -300,3 +300,17 @@ Notif yang tidak menemukan order pending masuk daftar **Unmatched** di dashboard
 - **Abaikan** — menghapus baris dari daftar tanpa mengubah order (audit `unmatched.ignore`).
 
 Nominal berbeda selalu ditolak server, jadi salah klik tidak bisa menandai order dengan nominal lain sebagai lunas.
+
+---
+
+## 14. Keamanan
+
+| Aspek | Implementasi |
+|---|---|
+| CSRF | Token double-submit (cookie `paypan_csrf` + field `csrf_token`). Semua POST `/admin/*` wajib token; gagal → 403. Form kasir kirim header `X-CSRF-Token`. |
+| Password admin | Hash PBKDF2-HMAC-SHA256, 210.000 iterasi, salt acak 16 byte. Plaintext lama dimigrasi otomatis saat login berikutnya. |
+| Body limit | `/api/notif` dan `/api/invoice` dibatasi 64 KB per request. |
+| Client IP | `X-Forwarded-For` hanya dipercaya dari `PAYPAN_TRUSTED_PROXY` (default loopback). |
+| Webhook dobel | Kolom `orders.webhook_fired` — hanya satu pemanggil yang boleh mengantrekan per order. |
+| Backup | `VACUUM INTO` + rename atomik. Backup lama tidak pernah tertimpa file setengah jadi. |
+| Retensi | Worker harian menghapus `payments`/`webhook_log`/`unmatched` lebih lama dari `PAYPAN_RETENTION_DAYS` (default 90). Order `paid` TIDAK dihapus. |

@@ -190,7 +190,21 @@ form.inline{display:inline}
 <div class="content">
 {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
 {{.Body}}
-</div></div></div></body></html>`))
+</div></div></div>
+<script>
+// CSRF: sisipkan token ke semua form POST otomatis (satu sumber, tidak bisa terlewat)
+(function(){
+  var t = "{{.CSRF}}";
+  document.querySelectorAll('form').forEach(function(f){
+    var m = (f.getAttribute('method')||'get').toLowerCase();
+    if (m !== 'post') return;
+    if (f.querySelector('input[name=csrf_token]')) return;
+    var i = document.createElement('input');
+    i.type='hidden'; i.name='csrf_token'; i.value=t;
+    f.appendChild(i);
+  });
+})();
+</script></body></html>`))
 type pageData struct {
 	Title string
 	Tab   string
@@ -199,10 +213,26 @@ type pageData struct {
 }
 
 func (s *srv) renderPage(w http.ResponseWriter, tab, title, flash string, body func() template.HTML) {
+	csrf := s.ensureCSRF(w, nil)
 	adminTmpl.Execute(w, map[string]any{
 		"Tab": tab, "Title": title, "Flash": flash, "Body": body(),
-		"User": s.adminUser(),
+		"User": s.adminUser(), "CSRF": csrf,
 	})
+}
+
+// requireAdmin: session + CSRF untuk semua request POST ke /admin/*.
+// GET tidak butuh CSRF (idempoten). Dipakai sebagai middleware.
+func (s *srv) requireAdminCSRF(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			if !s.checkCSRF(r) {
+				s.audit("anon", "csrf.tolak", r.URL.Path)
+				http.Error(w, "CSRF token tidak valid — muat ulang halaman lalu coba lagi", http.StatusForbidden)
+				return
+			}
+		}
+		next(w, r)
+	}
 }
 
 func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
