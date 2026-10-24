@@ -354,6 +354,22 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 	}
 	s.renderPage(w, "apps", "Aplikasi & Token", flash, func() template.HTML {
 		var b strings.Builder
+		// ---- Info koneksi untuk app NotifListen ----
+		port := portFromAddr(s.addr)
+		ips := lanAddresses()
+		b.WriteString(`<div class="card"><h2>Koneksi untuk app NotifListen</h2>`)
+		if len(ips) == 0 {
+			b.WriteString(`<p style="font-size:13px;color:#b42318;margin:0">Tidak terdeteksi alamat LAN. Pastikan server terhubung ke jaringan lokal, atau pakai URL Cloudflare Tunnel di bawah.</p>`)
+		} else {
+			b.WriteString(`<p style="font-size:13px;color:#344054;margin:0 0 8px">Isi field <b>URL Server</b> di app dengan salah satu alamat LAN ini (HP dan server harus di jaringan yang sama):</p>`)
+			for _, ip := range ips {
+				u := "http://" + ip + ":" + port + "/api/notif"
+				b.WriteString(`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+<code class="tok" title="klik untuk copy" onclick="navigator.clipboard.writeText('` + u + `');this.style.outline='2px solid #1a7f37';setTimeout(()=>this.style.outline='',600)" style="cursor:pointer;padding:6px 10px;background:#f2f4f8;border-radius:6px">` + u + `</code>
+<span style="font-size:12px;color:#667085">klik untuk copy</span></div>`)
+			}
+		}
+		b.WriteString(`<p style="font-size:12px;color:#98a2b3;margin:10px 0 0">LAN lebih cepat dan tetap jalan walau internet mati, tapi memakai HTTP polos. Pakai URL Cloudflare Tunnel (HTTPS) kalau HP dibawa keluar jaringan atau butuh enkripsi.</p></div>`)
 		b.WriteString(`<div class="card"><h2>Tambah aplikasi</h2>
 <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
 <input type="hidden" name="act" value="add">

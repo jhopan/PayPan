@@ -50,6 +50,7 @@ func main() {
 		tgChat:  *tgChat,
 		httpc:   &http.Client{Timeout: 10 * time.Second},
 		dbPath:  *dbPath,
+		addr:    *addr,
 	}
 
 	// QRIS hash pinning: verifikasi integritas payload saat startup
