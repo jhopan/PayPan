@@ -260,3 +260,43 @@ Ringkas dua lapis:
 DB selalu menang atas env/flag untuk konfigurasi harian.
 
 Langkah 5-7 butuh **app NotifListenPayment ter-install di HP merchant** (lihat repo [NotifListen-Payment](https://github.com/jhopan/NotifListen-Payment)) dan **GoPay Merchant terlogin** di HP tersebut.
+
+---
+
+## 11. Health check
+
+`GET /healthz` — tanpa auth, untuk monitoring eksternal (uptime robot, systemd watchdog).
+
+```json
+{"status":"ok","qris":"ok","webhook_backlog":0,"pending_stuck":0,"time":1792871531}
+```
+
+| Status | HTTP | Arti |
+|---|---|---|
+| `ok` | 200 | DB bisa di-query, QRIS terpasang, tidak ada backlog |
+| `degraded` | 503 | QRIS kosong, atau >50 order pending yang sudah lewat expiry |
+| `db_error` | 503 | DB tidak bisa di-query |
+
+`webhook_backlog` = jumlah webhook di antrean retry. `pending_stuck` = order pending yang lewat expiry dan belum dibereskan worker.
+
+---
+
+## 12. Antrean webhook
+
+Webhook tidak lagi dikirim "tembak-lalu-lupakan". Setiap `order.paid` masuk tabel `webhook_queue` dulu, lalu worker mengirimnya:
+
+- Sukses (2xx) → baris antrean dihapus.
+- Gagal → retry dengan backoff **30s, 2m, 5m, 15m** (total 5 percobaan), lalu menyerah.
+- Restart server tidak menghilangkan retry — antrean ada di SQLite.
+- Semua percobaan dicatat di `webhook_log`.
+
+---
+
+## 13. Menangani unmatched dari dashboard
+
+Notif yang tidak menemukan order pending masuk daftar **Unmatched** di dashboard. Untuk setiap baris tersedia:
+
+- **Cocokkan → `<order-id>`** — hanya muncul kalau ada order dengan nominal persis sama (status pending/expired/refunded). Menandai order lunas, mengirim webhook, mencatat audit `unmatched.match`, dan menghapus baris unmatched.
+- **Abaikan** — menghapus baris dari daftar tanpa mengubah order (audit `unmatched.ignore`).
+
+Nominal berbeda selalu ditolak server, jadi salah klik tidak bisa menandai order dengan nominal lain sebagai lunas.

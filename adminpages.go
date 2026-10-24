@@ -210,13 +210,24 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	flash := ""
-	if r.Method == http.MethodPost && r.FormValue("act") == "del_tx" {
-		id := r.FormValue("id")
-		if s.deleteTx(id) {
-			s.audit(s.adminUser(), "tx.delete", id)
-			flash = "Transaksi " + id + " dihapus"
-		} else {
-			flash = "Gagal hapus (tidak ditemukan)"
+	if r.Method == http.MethodPost {
+		switch r.FormValue("act") {
+		case "del_tx":
+			id := r.FormValue("id")
+			if s.deleteTx(id) {
+				s.audit(s.adminUser(), "tx.delete", id)
+				flash = "Transaksi " + id + " dihapus"
+			} else {
+				flash = "Gagal hapus (tidak ditemukan)"
+			}
+		case "unm_match":
+			msg, _ := s.markUnmatchedPaid(r.FormValue("pid"), r.FormValue("oid"))
+			flash = msg
+		case "unm_ignore":
+			pid := r.FormValue("pid")
+			s.db.Exec("DELETE FROM unmatched WHERE payment_id=?", pid)
+			s.audit(s.adminUser(), "unmatched.ignore", pid)
+			flash = "Notif diabaikan dan dihapus dari daftar"
 		}
 	}
 	var stats struct{ Paid, Pending, Expired, Pay, Unmatch int }
@@ -265,10 +276,21 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		}
 		b.WriteString(`</table></div>`)
 		if len(unm) > 0 {
-			b.WriteString(`<div class="card"><h2>Unmatched</h2><table>
-<tr><th>Waktu</th><th class="money">Amount</th><th>Alasan</th></tr>`)
+			b.WriteString(`<div class="card"><h2>Unmatched</h2>
+<p style="font-size:12px;color:#98a2b3;margin:0 0 10px">Notif masuk yang tidak menemukan order pending — biasanya karena pembayaran lewat dari window. Cocokkan ke order yang nominalnya sama, atau abaikan.</p>
+<table><tr><th>Waktu</th><th class="money">Amount</th><th>Alasan</th><th>Aksi</th></tr>`)
 			for _, u := range unm {
-				b.WriteString(`<tr><td><small>` + timeFmt(u.ReceivedAt) + `</small></td><td class="money">` + rp(u.Amount) + `</td><td>` + esc(u.Reason) + `</td></tr>`)
+				b.WriteString(`<tr><td><small>` + timeFmt(u.ReceivedAt) + `</small></td><td class="money">` + rp(u.Amount) + `</td><td>` + esc(u.Reason) + `</td><td>`)
+				if len(u.Candidates) == 0 {
+					b.WriteString(`<form method="post" class="inline"><input type="hidden" name="act" value="unm_ignore"><input type="hidden" name="pid" value="` + esc(u.PaymentID) + `"><button class="sec" style="padding:4px 10px;font-size:12px">Abaikan</button></form>`)
+					b.WriteString(`<br><small style="color:#98a2b3">tidak ada order dengan nominal ini</small>`)
+				} else {
+					for _, c := range u.Candidates {
+						b.WriteString(`<form method="post" class="inline" style="margin-right:6px"><input type="hidden" name="act" value="unm_match"><input type="hidden" name="pid" value="` + esc(u.PaymentID) + `"><input type="hidden" name="oid" value="` + esc(c.ID) + `"><button style="padding:4px 10px;font-size:12px">Cocokkan → ` + esc(c.ID) + ` (` + esc(c.Status) + `)</button></form>`)
+					}
+					b.WriteString(`<form method="post" class="inline"><input type="hidden" name="act" value="unm_ignore"><input type="hidden" name="pid" value="` + esc(u.PaymentID) + `"><button class="sec" style="padding:4px 10px;font-size:12px">Abaikan</button></form>`)
+				}
+				b.WriteString(`</td></tr>`)
 			}
 			b.WriteString(`</table></div>`)
 		}

@@ -49,24 +49,58 @@ func (s *srv) fireWebhooks(orderID string, total int64) {
 		},
 	})
 
+	// Masukkan ke antrean persisten: worker yang mengirim + retry.
+	// Ini menggantikan goroutine + time.Sleep supaya retry tidak hilang saat restart.
+	now := time.Now().Unix()
 	for _, w := range urls {
-		go func(w wh) {
-			code := s.deliverWebhook(w.url, payload, w.secret, w.id)
-			s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
-				orderID, w.url, code)
-			// retry sederhana: selain 2xx coba 2x lagi dengan jeda
-			if code < 200 || code >= 300 {
-				for i := 0; i < 2; i++ {
-					time.Sleep(30 * time.Second)
-					code = s.deliverWebhook(w.url, payload, w.secret, w.id)
-					s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
-						orderID, w.url, code)
-					if code >= 200 && code < 300 {
-						break
-					}
-				}
+		s.db.Exec(`INSERT INTO webhook_queue(order_id,hook_id,url,secret,payload,attempts,next_at,created_at)
+			VALUES(?,?,?,?,?,0,?,?)`, orderID, w.id, w.url, w.secret, string(payload), now, now)
+	}
+}
+
+// webhookWorker: proses antrean webhook. Backoff: 30s, 2m, 5m, 15m, lalu menyerah
+// setelah 5 percobaan (dicatat di webhook_log sebagai gagal).
+func (s *srv) webhookWorker() {
+	backoff := []int64{30, 120, 300, 900}
+	for range time.Tick(5 * time.Second) {
+		now := time.Now().Unix()
+		rows, err := s.db.Query(`SELECT id,order_id,hook_id,url,secret,payload,attempts
+			FROM webhook_queue WHERE next_at<=? ORDER BY id LIMIT 20`, now)
+		if err != nil {
+			continue
+		}
+		type job struct {
+			id, hookID, attempts int64
+			orderID, url, secret, payload string
+		}
+		var jobs []job
+		for rows.Next() {
+			var j job
+			if rows.Scan(&j.id, &j.orderID, &j.hookID, &j.url, &j.secret, &j.payload, &j.attempts) == nil {
+				jobs = append(jobs, j)
 			}
-		}(w)
+		}
+		rows.Close()
+
+		// rows sudah ditutup di atas: jangan pernah menahan koneksi DB
+		// selama HTTP call (MaxOpenConns=1 -> seluruh server akan macet).
+		for _, j := range jobs {
+			code := s.deliverWebhook(j.url, []byte(j.payload), j.secret, j.hookID)
+			s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
+				j.orderID, j.url, code)
+			if code >= 200 && code < 300 {
+				s.db.Exec("DELETE FROM webhook_queue WHERE id=?", j.id)
+				continue
+			}
+			next := j.attempts
+			if int(next) >= len(backoff) {
+				// habis percobaan: buang dari antrean, kegagalan tetap tercatat di webhook_log
+				s.db.Exec("DELETE FROM webhook_queue WHERE id=?", j.id)
+				continue
+			}
+			delay := backoff[next]
+			s.db.Exec("UPDATE webhook_queue SET attempts=attempts+1, next_at=? WHERE id=?", now+delay, j.id)
+		}
 	}
 }
 
@@ -106,6 +140,7 @@ func (s *srv) manualPaid(orderID string) bool {
 	}
 	var total int64
 	s.db.QueryRow("SELECT total FROM orders WHERE id=?", orderID).Scan(&total)
-	s.fireWebhooks(orderID, total)
+	// goroutine: handler HTTP tidak boleh menunggu webhook (MaxOpenConns=1)
+	go s.fireWebhooks(orderID, total)
 	return true
 }

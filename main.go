@@ -133,6 +133,7 @@ func main() {
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin", 302)
 	})
+	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -141,6 +142,7 @@ func main() {
 		w.Write([]byte("Paypan payment gateway OK\n"))
 	})
 
+	go s.webhookWorker()
 	go s.expireWorker()
 	go s.backupWorker(*dbPath)
 	go apiJanitorWorker()

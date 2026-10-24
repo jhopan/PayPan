@@ -1,8 +1,10 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -47,16 +49,52 @@ func (l *loginLimit) reset(ip string) {
 	l.mu.Unlock()
 }
 
-func clientIP(r *http.Request) string {
-	// CF tunnel: X-Forwarded-For ; direct: RemoteAddr
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return xff
+// trustedProxies: hanya proxy ini yang boleh menentukan IP client lewat header.
+// Default loopback (cloudflared berjalan di mesin yang sama). Set
+// PAYPAN_TRUSTED_PROXY (dipisah koma) kalau tunnel/proxy ada di host lain.
+func trustedProxies() []string {
+	raw := os.Getenv("PAYPAN_TRUSTED_PROXY")
+	if raw == "" {
+		return []string{"127.0.0.1", "::1"}
 	}
-	host := r.RemoteAddr
-	for i := len(host) - 1; i >= 0; i-- {
-		if host[i] == ':' {
-			return host[:i]
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
 		}
+	}
+	return out
+}
+
+func isTrustedProxy(ip string) bool {
+	for _, t := range trustedProxies() {
+		if ip == t {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIP: IP client sebenarnya. Header X-Forwarded-For hanya dipercaya
+// kalau request datang dari proxy tepercaya — mencegah pemalsuan header
+// untuk melewati rate limit login.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	if !isTrustedProxy(host) {
+		return host
+	}
+	// proxy tepercaya: ambil hop pertama (client asli)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		first := strings.TrimSpace(strings.Split(xff, ",")[0])
+		if first != "" {
+			return first
+		}
+	}
+	if cf := r.Header.Get("CF-Connecting-IP"); cf != "" {
+		return strings.TrimSpace(cf)
 	}
 	return host
 }

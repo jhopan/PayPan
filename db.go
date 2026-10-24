@@ -79,10 +79,28 @@ CREATE TABLE IF NOT EXISTS webhook_log (
 	code INTEGER,
 	at INTEGER NOT NULL
 );
+-- Antrean webhook persisten: retry tidak hilang saat server restart.
+CREATE TABLE IF NOT EXISTS webhook_queue (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	order_id TEXT NOT NULL,
+	hook_id INTEGER NOT NULL,
+	url TEXT NOT NULL,
+	secret TEXT,
+	payload TEXT NOT NULL,
+	attempts INTEGER NOT NULL DEFAULT 0,
+	next_at INTEGER NOT NULL,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_whq_next ON webhook_queue(next_at);
 `
 
 func initDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	return initDBFromDSN(path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+}
+
+// initDBFromDSN dipakai test (DSN memory sudah lengkap, jangan ditambah pragma).
+func initDBFromDSN(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}

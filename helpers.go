@@ -35,9 +35,22 @@ type payLite struct {
 }
 
 type unmatchLite struct {
+	PaymentID  string
 	Amount     int64
 	Reason     string
 	ReceivedAt int64
+	// kandidat order dengan total sama (pending/expired) untuk dicocokkan manual
+	Candidates []unmatchCand
+}
+
+// unmatchCand: order yang nominalnya cocok dengan notif tak terduga.
+type unmatchCand struct {
+	ID     string
+	Status string
+	Price  int64
+	Code   int64
+	Total  int64
+	At     int64
 }
 
 func (s *srv) recentOrders(n int) []orderLite {
@@ -73,7 +86,7 @@ func (s *srv) recentPayments(n int) []payLite {
 }
 
 func (s *srv) recentUnmatched(n int) []unmatchLite {
-	rows, err := s.db.Query("SELECT amount,reason,received_at FROM unmatched ORDER BY received_at DESC LIMIT ?", n)
+	rows, err := s.db.Query("SELECT payment_id,amount,reason,received_at FROM unmatched ORDER BY received_at DESC LIMIT ?", n)
 	if err != nil {
 		return nil
 	}
@@ -81,11 +94,67 @@ func (s *srv) recentUnmatched(n int) []unmatchLite {
 	var out []unmatchLite
 	for rows.Next() {
 		var u unmatchLite
-		if rows.Scan(&u.Amount, &u.Reason, &u.ReceivedAt) == nil {
+		if rows.Scan(&u.PaymentID, &u.Amount, &u.Reason, &u.ReceivedAt) == nil {
 			out = append(out, u)
 		}
 	}
+	rows.Close() // WAJIB: pool = 1 koneksi, nested query di dalam loop = deadlock
+	// kandidat diambil setelah rows ditutup
+	for i := range out {
+		out[i].Candidates = s.candidateOrders(out[i].Amount)
+	}
 	return out
+}
+
+// candidateOrders: order dengan total persis sama yang masih bisa ditindaklanjuti.
+// Dipakai tombol "Cocokkan" di dashboard untuk notif yang telat masuk.
+func (s *srv) candidateOrders(total int64) []unmatchCand {
+	rows, err := s.db.Query(
+		"SELECT id,status,price,code,total,COALESCE(paid_at,created_at) FROM orders WHERE total=? AND status IN ('pending','expired','refunded') ORDER BY created_at DESC LIMIT 5", total)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []unmatchCand
+	for rows.Next() {
+		var c unmatchCand
+		if rows.Scan(&c.ID, &c.Status, &c.Price, &c.Code, &c.Total, &c.At) == nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// markUnmatchedPaid: cocokkan notif tak terduga ke order tertentu (aksi admin).
+// Order harus pending/expired dan nominal harus sama — mencegah salah klik.
+func (s *srv) markUnmatchedPaid(paymentID, orderID string) (string, bool) {
+	var amount int64
+	if err := s.db.QueryRow("SELECT amount FROM unmatched WHERE payment_id=?", paymentID).Scan(&amount); err != nil {
+		return "Notif tidak ditemukan", false
+	}
+	var status string
+	var total int64
+	if err := s.db.QueryRow("SELECT status,total FROM orders WHERE id=?", orderID).Scan(&status, &total); err != nil {
+		return "Order tidak ditemukan", false
+	}
+	if total != amount {
+		return "Nominal tidak sama — dibatalkan", false
+	}
+	if status == "paid" {
+		return "Order sudah lunas", false
+	}
+	res, err := s.db.Exec("UPDATE orders SET status='paid', paid_at=strftime('%s','now') WHERE id=? AND status<>'paid'", orderID)
+	if err != nil {
+		return "Gagal update: " + err.Error(), false
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return "Gagal menandai lunas", false
+	}
+	s.db.Exec("DELETE FROM unmatched WHERE payment_id=?", paymentID)
+	s.audit(s.adminUser(), "unmatched.match", paymentID+" -> "+orderID)
+	// goroutine: jangan tahan handler HTTP selama query/HTTP webhook
+	go s.fireWebhooks(orderID, total)
+	return "Notif dicocokkan ke order " + orderID, true
 }
 
 type paidTx struct {

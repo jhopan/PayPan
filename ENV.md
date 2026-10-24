@@ -27,6 +27,7 @@ default `:8090`.
 | `PAYPAN_PENDING_LIMIT` | `50` | Maks invoice pending per token |
 | `PAYPAN_API_MAX_PER_MIN` | `60` | Rate limit API req/menit/token |
 | `PAYPAN_LOGIN_MAX` | `5` | Rate limit login per 10 menit per IP |
+| `PAYPAN_TRUSTED_PROXY` | `127.0.0.1,::1` | IP proxy yang boleh menentukan client IP via header |
 
 ## Contoh systemd
 
