@@ -49,7 +49,7 @@ func (s *srv) handleKasir(w http.ResponseWriter, r *http.Request) {
 	// hint left-align
 	inner = strings.Replace(inner, `class="hint"`, `class="hint" style="text-align:left"`, 1)
 
-	s.renderPage(w, "kasir", "Kasir", r.URL.Query().Get("m"), func() template.HTML {
+	s.renderPage(w, r, "kasir", "Kasir", r.URL.Query().Get("m"), func() template.HTML {
 		var sb strings.Builder
 		sb.WriteString(`<style>
 .kasir{max-width:420px;margin:0 auto;text-align:center}

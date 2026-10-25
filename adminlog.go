@@ -53,7 +53,7 @@ func (s *srv) handleAdminLog(w http.ResponseWriter, r *http.Request) {
 		rows.Close()
 	}
 
-	s.renderPage(w, "log", "Log", r.URL.Query().Get("m"), func() template.HTML {
+	s.renderPage(w, r, "log", "Log", r.URL.Query().Get("m"), func() template.HTML {
 		var sb strings.Builder
 		sb.WriteString(`<div class="card"><h2>Audit Log</h2>
 <table><tr><th>Waktu</th><th>Oleh</th><th>Aksi</th><th>Detail</th></tr>`)

@@ -167,7 +167,7 @@ func (s *srv) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	files := s.listBackups()
-	s.renderPage(w, "backup", "Backup & Restore", flash, func() template.HTML {
+	s.renderPage(w, r, "backup", "Backup & Restore", flash, func() template.HTML {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Backup Database</h2>`)
 		b.WriteString(`<form method="post" style="margin-bottom:12px"><input type="hidden" name="act" value="create"><button>Buat Backup Sekarang</button></form>`)

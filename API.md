@@ -314,3 +314,16 @@ Nominal berbeda selalu ditolak server, jadi salah klik tidak bisa menandai order
 | Webhook dobel | Kolom `orders.webhook_fired` — hanya satu pemanggil yang boleh mengantrekan per order. |
 | Backup | `VACUUM INTO` + rename atomik. Backup lama tidak pernah tertimpa file setengah jadi. |
 | Retensi | Worker harian menghapus `payments`/`webhook_log`/`unmatched` lebih lama dari `PAYPAN_RETENTION_DAYS` (default 90). Order `paid` TIDAK dihapus. |
+
+---
+
+## 15. Stabilitas
+
+| Aspek | Implementasi |
+|---|---|
+| Panic handler | Middleware `recoverMW` — panic dibalas 500 + stack di log, server tetap hidup. |
+| Panic worker | Semua worker dibungkus `safeGo`: panic dicatat lalu worker dijalankan ulang (tidak mati diam-diam). |
+| Timeout HTTP | `ReadHeaderTimeout 10s`, `ReadTimeout 30s`, `WriteTimeout 60s`, `IdleTimeout 120s`, `MaxHeaderBytes 1 MB`. |
+| Graceful shutdown | SIGINT/SIGTERM → `srv.Shutdown` dengan batas 15 detik; request aktif diselesaikan dulu. |
+| Webhook paralel | Maks 5 job bersamaan (bukan serial). Antrean tidak menumpuk saat penerima lambat. |
+| Koneksi DB | `SetConnMaxLifetime 30 menit` — koneksi SQLite didaur ulang, tidak menggantung selamanya. |

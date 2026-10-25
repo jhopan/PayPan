@@ -212,8 +212,8 @@ type pageData struct {
 	Body  func() template.HTML
 }
 
-func (s *srv) renderPage(w http.ResponseWriter, tab, title, flash string, body func() template.HTML) {
-	csrf := s.ensureCSRF(w, nil)
+func (s *srv) renderPage(w http.ResponseWriter, r *http.Request, tab, title, flash string, body func() template.HTML) {
+	csrf := s.ensureCSRF(w, r)
 	adminTmpl.Execute(w, map[string]any{
 		"Tab": tab, "Title": title, "Flash": flash, "Body": body(),
 		"User": s.adminUser(), "CSRF": csrf,
@@ -269,7 +269,7 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	pays := s.recentPayments(10)
 	unm := s.recentUnmatched(8)
 
-	s.renderPage(w, "dash", "Dashboard", flash, func() template.HTML {
+	s.renderPage(w, r, "dash", "Dashboard", flash, func() template.HTML {
 		var b strings.Builder
 		// stat tiles: kartu kecil berjajar, bukan tabel
 		b.WriteString(`<div class="stats">
@@ -382,7 +382,7 @@ func (s *srv) handleAdminApps(w http.ResponseWriter, r *http.Request) {
 		_ = at
 		appEvents[a.ID] = timeFmt(a.Created) + " (dibuat)"
 	}
-	s.renderPage(w, "apps", "Aplikasi & Token", flash, func() template.HTML {
+	s.renderPage(w, r, "apps", "Aplikasi & Token", flash, func() template.HTML {
 		var b strings.Builder
 		// ---- Info koneksi untuk app NotifListen ----
 		port := portFromAddr(s.addr)
@@ -586,7 +586,7 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 	s.db.QueryRow("SELECT value FROM settings WHERE key='tg_token'").Scan(&tgToken)
 	s.db.QueryRow("SELECT value FROM settings WHERE key='tg_chat'").Scan(&tgChat)
 
-	s.renderPage(w, "config", "Konfigurasi", flash, func() template.HTML {
+	s.renderPage(w, r, "config", "Konfigurasi", flash, func() template.HTML {
 		var b strings.Builder
 		// ---- QRIS Statis ----
 		b.WriteString(`<div class="card"><h2>QRIS Statis</h2>

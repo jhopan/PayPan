@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -70,8 +71,10 @@ func (s *srv) fireWebhooks(orderID string, total int64) {
 
 // webhookWorker: proses antrean webhook. Backoff: 30s, 2m, 5m, 15m, lalu menyerah
 // setelah 5 percobaan (dicatat di webhook_log sebagai gagal).
+// webhookBackoff: jeda antar percobaan (detik). 4 entri = maks 5 percobaan total.
+var webhookBackoff = []int64{30, 120, 300, 900}
+
 func (s *srv) webhookWorker() {
-	backoff := []int64{30, 120, 300, 900}
 	for range time.Tick(5 * time.Second) {
 		now := time.Now().Unix()
 		rows, err := s.db.Query(`SELECT id,order_id,hook_id,url,secret,payload,attempts
@@ -94,24 +97,41 @@ func (s *srv) webhookWorker() {
 
 		// rows sudah ditutup di atas: jangan pernah menahan koneksi DB
 		// selama HTTP call (MaxOpenConns=1 -> seluruh server akan macet).
+		// Paralel terbatas: 20 job x 10s timeout serial = 200s (antrean menumpuk).
+		sem := make(chan struct{}, 5)
+		var wg sync.WaitGroup
 		for _, j := range jobs {
-			code := s.deliverWebhook(j.url, []byte(j.payload), j.secret, j.hookID)
-			s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
-				j.orderID, j.url, code)
-			if code >= 200 && code < 300 {
-				s.db.Exec("DELETE FROM webhook_queue WHERE id=?", j.id)
-				continue
-			}
-			next := j.attempts
-			if int(next) >= len(backoff) {
-				// habis percobaan: buang dari antrean, kegagalan tetap tercatat di webhook_log
-				s.db.Exec("DELETE FROM webhook_queue WHERE id=?", j.id)
-				continue
-			}
-			delay := backoff[next]
-			s.db.Exec("UPDATE webhook_queue SET attempts=attempts+1, next_at=? WHERE id=?", now+delay, j.id)
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(j struct {
+				id, hookID, attempts        int64
+				orderID, url, secret, payload string
+			}) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				s.processWebhookJob(j.id, j.hookID, j.attempts, j.orderID, j.url, j.secret, j.payload)
+			}(j)
 		}
+		wg.Wait()
 	}
+}
+
+// processWebhookJob: kirim satu job + update status antrean.
+func (s *srv) processWebhookJob(id, hookID, attempts int64, orderID, url, secret, payload string) {
+	code := s.deliverWebhook(url, []byte(payload), secret, hookID)
+	s.db.Exec("INSERT INTO webhook_log(order_id,url,code,at) VALUES(?,?,?,strftime('%s','now'))",
+		orderID, url, code)
+	if code >= 200 && code < 300 {
+		s.db.Exec("DELETE FROM webhook_queue WHERE id=?", id)
+		return
+	}
+	if int(attempts) >= len(webhookBackoff) {
+		// habis percobaan: buang dari antrean, kegagalan tetap tercatat di webhook_log
+		s.db.Exec("DELETE FROM webhook_queue WHERE id=?", id)
+		return
+	}
+	delay := webhookBackoff[attempts]
+	s.db.Exec("UPDATE webhook_queue SET attempts=attempts+1, next_at=? WHERE id=?", time.Now().Unix()+delay, id)
 }
 
 func (s *srv) deliverWebhook(url string, payload []byte, secret string, hookID int64) int {

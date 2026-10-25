@@ -173,7 +173,7 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		dayRows.Close()
 	}
 
-	s.renderPage(w, "laporan", "Laporan", flash, func() template.HTML {
+	s.renderPage(w, r, "laporan", "Laporan", flash, func() template.HTML {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Rekap per bulan</h2><table>
 <tr><th>Bulan</th><th class="money">Lunas</th><th class="money">Expired</th><th class="money">Pendapatan (lunas)</th></tr>`)

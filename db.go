@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"time"
+
 	_ "modernc.org/sqlite"
 )// Schema: orders (order customer), payments (semua notif dari device, audit),
 // unmatched (notif yang tidak cocok order pending). id device di payments unique.
@@ -105,6 +107,9 @@ func initDBFromDSN(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // SQLite: hindari SQLITE_BUSY
+	// koneksi tidak boleh hidup selamanya: kalau masuk state buruk,
+	// semua query macet sampai restart. Daur ulang tiap 30 menit.
+	db.SetConnMaxLifetime(30 * time.Minute)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err

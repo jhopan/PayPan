@@ -49,14 +49,19 @@ func (s *srv) ensureCSRF(w http.ResponseWriter, r *http.Request) string {
 		}
 	}
 	tok := newCSRFToken()
-	http.SetCookie(w, &http.Cookie{
-		Name:     csrfCookie,
-		Value:    tok,
-		Path:     "/",
-		HttpOnly: false, // harus bisa dibaca JS untuk tidak perlu render ulang
-		SameSite: http.SameSiteStrictMode,
-		MaxAge:   int(csrfTTL.Seconds()),
-	})
+	// Jangan set cookie baru pada response POST: browser sudah mengirim form
+	// dengan token lama, dan Set-Cookie di POST akan menimpa token itu
+	// sehingga submit berikutnya gagal (403 acak).
+	if r == nil || r.Method != http.MethodPost {
+		http.SetCookie(w, &http.Cookie{
+			Name:     csrfCookie,
+			Value:    tok,
+			Path:     "/",
+			HttpOnly: false, // harus bisa dibaca JS untuk tidak perlu render ulang
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   int(csrfTTL.Seconds()),
+		})
+	}
 	csrfTokens.mu.Lock()
 	csrfTokens.seen[tok] = time.Now().Add(csrfTTL)
 	csrfTokens.mu.Unlock()

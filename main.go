@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"crypto/subtle"
 	"flag"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -153,14 +156,46 @@ func main() {
 		w.Write([]byte("Paypan payment gateway OK\n"))
 	})
 
-	go s.retentionWorker()
-	go s.webhookWorker()
-	go s.expireWorker()
-	go s.backupWorker(*dbPath)
-	go apiJanitorWorker()
-	go s.sheetWorker()
+	// semua worker dibungkus safeGo: panic tidak mematikan worker permanen
+	safeGo("retention", s.retentionWorker)
+	safeGo("webhook", s.webhookWorker)
+	safeGo("expire", s.expireWorker)
+	safeGo("backup", func() { s.backupWorker(*dbPath) })
+	safeGo("apijanitor", apiJanitorWorker)
+	safeGo("sheets", s.sheetWorker)
+
+	// http.Server dengan timeout: tahan koneksi lambat (slowloris) & header raksasa
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           secureHeaders(recoverMW(mux)),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB
+	}
+
+	// graceful shutdown: SIGTERM/SIGINT -> tunggu request aktif selesai
+	done := make(chan struct{})
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		log.Println("sinyal berhenti diterima — menunggu request aktif (maks 15s)")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Println("shutdown paksa:", err)
+		}
+		close(done)
+	}()
+
 	log.Printf("Paypan server listening %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, secureHeaders(mux)))
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+	<-done
+	log.Println("server berhenti bersih")
 }
 
 // envOr: baca env, fallback default. Env tidak pernah menimpa flag eksplisit.

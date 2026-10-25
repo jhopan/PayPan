@@ -101,7 +101,7 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 		return time.Unix(ts, 0).Format("02 Jan 2006 15:04")
 	}
 
-	s.renderPage(w, "tx", "Detail Transaksi", flash, func() template.HTML {
+	s.renderPage(w, r, "tx", "Detail Transaksi", flash, func() template.HTML {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Order <code>` + id + `</code></h2>
 <table><tr><th>Status</th><td><span class="badge ` + status + `">` + status + `</span></td></tr>
