@@ -3,6 +3,10 @@
 <label style="display:block;font-size:13px;color:#344054;font-weight:600;margin:14px 0 6px">Nominal tagihan (Rp)</label>
 <input type="number" id="price" inputmode="numeric" placeholder="1000" min="1000" max="9000000" style="width:100%;padding:12px;font-size:22px;border:1px solid #d0d5dd;border-radius:10px;text-align:center;box-sizing:border-box">
 <div class="hint">Minimal Rp1.000 · kode unik 3 digit ditambahkan otomatis</div>
+<label style="display:block;font-size:13px;color:#344054;font-weight:600;margin:14px 0 6px">Untuk apa (opsional)</label>
+<input type="text" id="label" maxlength="120" placeholder="mis. Pulsa Telkomsel 10rb" style="width:100%;padding:11px;font-size:14px;border:1px solid #d0d5dd;border-radius:10px;box-sizing:border-box">
+<label style="display:block;font-size:13px;color:#344054;font-weight:600;margin:10px 0 6px">Pemesan (opsional)</label>
+<input type="text" id="buyer" maxlength="80" placeholder="mis. 0812xxxx atau nama" style="width:100%;padding:11px;font-size:14px;border:1px solid #d0d5dd;border-radius:10px;box-sizing:border-box">
 <button id="btn" onclick="buat()">Buat QRIS</button>
 </div>
 
@@ -33,7 +37,11 @@ async function buat(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       credentials:'same-origin',
-      body: JSON.stringify({price: price, label:'kasir'})
+      body: JSON.stringify({
+        price: price,
+        label: (document.getElementById('label').value || '').trim(),
+        buyer: (document.getElementById('buyer').value || '').trim()
+      })
     });
     const j = await res.json();
     if(!res.ok || j.error){ throw new Error(j.error || res.status); }
@@ -84,6 +92,8 @@ function reset(){
   document.getElementById('payView').style.display = 'none';
   document.getElementById('formView').style.display = 'block';
   document.getElementById('price').value = '';
+  document.getElementById('label').value = '';
+  document.getElementById('buyer').value = '';
   document.getElementById('done').style.display = 'none';
   document.getElementById('again').style.display = 'none';
   document.getElementById('qr').parentElement.style.display = 'inline-block';

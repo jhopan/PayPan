@@ -88,18 +88,18 @@ func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		respErr(w, 400, msg)
 		return
 	}
-	// lapisan anti slot-filling: maksimal 50 order pending aktif per app-token.
-	// (expired otomatis lewat dari hitungan karena status berubah)
+	// Batas GLOBAL invoice pending (semua token digabung), bukan per token:
+	// satu integrator seperti AgenPulsa bisa sah punya banyak order bersamaan.
+	// Tujuannya melindungi pool kode (999 per level), bukan menghukum satu klien.
 	appRowid := s.appRowidByToken(r.Header.Get("Authorization"))
-	if appRowid > 0 {
-		var pendingCount int
-		s.db.QueryRow("SELECT COUNT(*) FROM orders WHERE status='pending' AND created_by=?", appRowid).Scan(&pendingCount)
-		if pendingCount >= int(tuning.PendingMax()) {
-			respErr(w, 429, "terlalu banyak invoice pending aktif dari aplikasi ini (maks 50)")
-			return
-		}
+	var pendingTotal int
+	s.db.QueryRow("SELECT COUNT(*) FROM orders WHERE status='pending'").Scan(&pendingTotal)
+	if limit := int(tuning.PendingMax()); pendingTotal >= limit {
+		respErr(w, 429, "server sedang menampung "+itoa(pendingTotal)+" invoice pending (maks "+itoa(limit)+
+			"). Tunggu sebagian lunas atau expired, lalu coba lagi.")
+		return
 	}
-	oid, code, total, exp, err := s.claimOrder(q.Price, appRowid)
+	oid, code, total, exp, err := s.claimOrder(q.Price, appRowid, q.Label, q.Buyer)
 	if err != nil {
 		respErr(w, 503, err.Error())
 		return

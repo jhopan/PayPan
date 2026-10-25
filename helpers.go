@@ -85,6 +85,14 @@ func (s *srv) recentPayments(n int) []payLite {
 	return out
 }
 
+// escOrDash: escape HTML, tampilkan "—" kalau kosong.
+func escOrDash(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "—"
+	}
+	return esc(v)
+}
+
 func (s *srv) recentUnmatched(n int) []unmatchLite {
 	rows, err := s.db.Query("SELECT payment_id,amount,reason,received_at FROM unmatched ORDER BY received_at DESC LIMIT ?", n)
 	if err != nil {

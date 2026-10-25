@@ -576,6 +576,15 @@ func (s *srv) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 			} else {
 				tmsg += " paid INVALID (0-2592000)"
 			}
+			pl := r.FormValue("pending_limit")
+			if pl != "" {
+				if n, err := strconv.ParseInt(pl, 10, 64); err == nil && n >= 1 && n <= 5000 {
+					SetTuning(s.db, "tuning_pending_limit", n)
+					tmsg += " pending=" + pl
+				} else {
+					tmsg += " pending INVALID (1-5000)"
+				}
+			}
 			s.audit(actor, "tuning.set", tmsg)
 			flash = "Tuning disimpan: " + tmsg
 		}
@@ -671,6 +680,9 @@ Webhook = PayPan otomatis mengabari website/bot kamu saat ada invoice <b>lunas</
 <label style="font-size:13px;color:#344054;font-weight:600">Paid Cooldown (detik, 0-2592000)</label>
 <input name="paid_cooldown" type="number" min="0" max="2592000" value="` + strconv.FormatInt(tuning.PaidCooldownSec(), 10) + `" style="width:100%">
 <p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Lama kode dari transaksi PAID menunggu sebelum boleh dipakai invoice baru. Default 86400 (24 jam). Setelah lewat, dianggap mustahil masuk lagi (uang lama tidak mungkin datang setelah sehari).</p>
+<label style="font-size:13px;color:#344054;font-weight:600">Batas Invoice Pending (1-5000)</label>
+<input name="pending_limit" type="number" min="1" max="5000" value="` + strconv.FormatInt(tuning.PendingMax(), 10) + `" style="width:100%">
+<p style="font-size:12px;color:#98a2b3;margin:4px 0 8px">Jumlah maksimal invoice pending di seluruh server (semua token digabung). Default 200. Melindungi pool kode, bukan membatasi satu klien — AgenPulsa boleh punya banyak order bersamaan.</p>
 <button style="margin-top:10px">Simpan</button></form></div>`)
 		// ---- Backup Google Sheets ----
 		var ssURL, ssSecret string

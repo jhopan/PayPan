@@ -15,7 +15,7 @@ type TuningCfg struct {
 	InvoiceExpiry  int64 // detik window bayar invoice (default 300 = 5 menit)
 	CodeCooldown   int64 // detik cooldown kode expired/refunded (default 7200 = 2 jam)
 	PaidCooldown   int64 // detik sebelum kode paid boleh dipakai lagi (default 86400 = 24 jam)
-	PendingLimit   int64 // maks invoice pending per token (default 50)
+	PendingLimit   int64 // maks invoice pending GLOBAL semua token (default 200)
 	APIMaxPerMin   int64 // rate limit API req/menit/token (default 60)
 	LoginMaxPerWin int64 // rate limit login per window IP (default 5)
 }
@@ -24,7 +24,7 @@ var tuning = &TuningCfg{
 	InvoiceExpiry:  300,
 	CodeCooldown:   7200,
 	PaidCooldown:   86400,
-	PendingLimit:   50,
+	PendingLimit:   200,
 	APIMaxPerMin:   60,
 	LoginMaxPerWin: 5,
 }

@@ -170,6 +170,7 @@ func (s *srv) manualPaid(orderID string) bool {
 	}
 	var total int64
 	s.db.QueryRow("SELECT total FROM orders WHERE id=?", orderID).Scan(&total)
+	s.logOrderEvent(orderID, "pending", "paid", s.adminUser(), "ditandai lunas manual")
 	// goroutine: handler HTTP tidak boleh menunggu webhook (MaxOpenConns=1)
 	go s.fireWebhooks(orderID, total)
 	return true

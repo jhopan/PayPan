@@ -119,6 +119,8 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	curMonth := time.Now().Format("2006-01")
+	firstOfMonth := time.Now().Format("2006-01") + "-01"
+	todayStr := time.Now().Format("2006-01-02")
 
 	// daftar transaksi paid terbaru (bisa difilter per bulan) + sumber dari payments
 	filterMonth := r.URL.Query().Get("bulan")
@@ -231,12 +233,33 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		}
 		b.WriteString(`</small></div>`)
 
+		// ---- Ekspor CSV ----
+		b.WriteString(`<div class="card"><h2>Ekspor transaksi</h2>
+<form method="get" action="/admin/export" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+<div><label style="display:block;font-size:12px;color:#344054;font-weight:600;margin-bottom:4px">Dari</label>
+<input type="date" name="from" value="` + firstOfMonth + `" style="margin:0"></div>
+<div><label style="display:block;font-size:12px;color:#344054;font-weight:600;margin-bottom:4px">Sampai</label>
+<input type="date" name="to" value="` + todayStr + `" style="margin:0"></div>
+<div><label style="display:block;font-size:12px;color:#344054;font-weight:600;margin-bottom:4px">Status</label>
+<select name="status" style="margin:0"><option value="">semua</option><option value="paid">paid</option><option value="pending">pending</option><option value="expired">expired</option><option value="refunded">refunded</option></select></div>
+<button>Unduh CSV</button></form>
+<small>CSV bisa dibuka di Excel/Google Sheets. Kolom: ID, waktu, status, harga, kode, total, untuk apa, pemesan, dibayar, link.</small></div>`)
+
+		// ---- Hapus per bulan (dengan jumlah) ----
+		var monthCount int
+		if filterMonth != "" {
+			from, to := monthRange(filterMonth)
+			s.db.QueryRow("SELECT COUNT(*) FROM orders WHERE created_at>=? AND created_at<?", from, to).Scan(&monthCount)
+		}
 		b.WriteString(`<div class="card"><h2>Hapus data per bulan</h2>
-<form method="post" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+<form method="post" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap" onsubmit="return confirm('Hapus semua data bulan ini? Tidak bisa dibatalkan.')">
 <input type="hidden" name="act" value="purge_month">
 <input type="month" name="month" value="` + curMonth + `" style="margin:0" required>
-<button class="del">Hapus Data Bulan Ini</button></form>
-<small>Menghapus order, payments, unmatched, dan webhook log bulan tersebut. Tidak bisa dibatalkan.</small></div>`)
+<button class="del">Hapus Data Bulan Ini</button></form>`)
+		if filterMonth != "" {
+			b.WriteString(`<p style="font-size:13px;color:#b42318;margin:8px 0 0"><b>` + itoa(monthCount) + ` transaksi</b> pada bulan ` + esc(filterMonth) + ` akan terhapus.</p>`)
+		}
+		b.WriteString(`<small>Menghapus order, payments, unmatched, dan webhook log bulan tersebut. Tidak bisa dibatalkan.</small></div>`)
 
 		b.WriteString(`<div class="card"><h2>Hapus SEMUA data transaksional</h2>
 <form method="post"><input type="hidden" name="act" value="purge_all">
@@ -246,6 +269,15 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 <small>Menghapus semua order, payments, unmatched, webhook log. Aplikasi & token, pengaturan, dan audit log TIDAK terhapus.</small></div>`)
 		return template.HTML(b.String())
 	})
+}
+
+// monthRange: rentang unix [awal bulan, awal bulan berikutnya) untuk "2006-01".
+func monthRange(month string) (int64, int64) {
+	t, err := time.ParseInLocation("2006-01", month, time.Local)
+	if err != nil {
+		return 0, 0
+	}
+	return t.Unix(), t.AddDate(0, 1, 0).Unix()
 }
 
 func (s *srv) deleteRange(query string, from, to int64) int64 {

@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS orders (
 	created_at INTEGER NOT NULL,
 	expires_at INTEGER NOT NULL,
 	created_by INTEGER NOT NULL DEFAULT 0,
-	paid_at INTEGER
+	paid_at INTEGER,
+	label TEXT NOT NULL DEFAULT '',
+	buyer TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_orders_status_total ON orders(status, total);
 CREATE INDEX IF NOT EXISTS idx_orders_expires ON orders(status, expires_at);
@@ -26,6 +28,18 @@ CREATE INDEX IF NOT EXISTS idx_orders_expires ON orders(status, expires_at);
 -- SQLite enforce ini di level storage — dua INSERT bareng, salah satu pasti gagal.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_pending_total
 	ON orders(total) WHERE status='pending';
+
+-- Riwayat perubahan status per order (audit transaksi, bukan audit admin).
+CREATE TABLE IF NOT EXISTS order_events (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	order_id TEXT NOT NULL,
+	from_status TEXT NOT NULL DEFAULT '',
+	to_status TEXT NOT NULL,
+	actor TEXT NOT NULL DEFAULT 'system',
+	note TEXT NOT NULL DEFAULT '',
+	at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_order_events_order ON order_events(order_id, at);
 
 CREATE TABLE IF NOT EXISTS payments (
 	id TEXT PRIMARY KEY,
@@ -129,6 +143,19 @@ func initDBFromDSN(dsn string) (*sql.DB, error) {
 		if _, err := db.Exec("ALTER TABLE orders ADD COLUMN webhook_fired INTEGER NOT NULL DEFAULT 0"); err != nil {
 			db.Close()
 			return nil, err
+		}
+	}
+	for _, m := range []struct{ name, ddl string }{
+		{"label", "ALTER TABLE orders ADD COLUMN label TEXT NOT NULL DEFAULT ''"},
+		{"buyer", "ALTER TABLE orders ADD COLUMN buyer TEXT NOT NULL DEFAULT ''"},
+	} {
+		var n int
+		db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('orders') WHERE name=?", m.name).Scan(&n)
+		if n == 0 {
+			if _, err := db.Exec(m.ddl); err != nil {
+				db.Close()
+				return nil, err
+			}
 		}
 	}
 	var whSec int

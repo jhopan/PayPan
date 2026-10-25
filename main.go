@@ -142,6 +142,7 @@ func main() {
 	mux.HandleFunc("/admin/log", s.requireAdminCSRF(s.handleAdminLog))
 	mux.HandleFunc("/admin/laporan", s.requireAdminCSRF(s.handleAdminLaporan))
 	mux.HandleFunc("/admin/backup", s.requireAdminCSRF(s.handleAdminBackup))
+	mux.HandleFunc("/admin/export", s.handleExport)
 	mux.HandleFunc("/admin/tx/", s.requireAdminCSRF(s.handleTxDetail))
 	mux.HandleFunc("/admin", s.requireAdminCSRF(s.handleAdminHome))
 	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {

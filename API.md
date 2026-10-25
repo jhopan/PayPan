@@ -327,3 +327,45 @@ Nominal berbeda selalu ditolak server, jadi salah klik tidak bisa menandai order
 | Graceful shutdown | SIGINT/SIGTERM → `srv.Shutdown` dengan batas 15 detik; request aktif diselesaikan dulu. |
 | Webhook paralel | Maks 5 job bersamaan (bukan serial). Antrean tidak menumpuk saat penerima lambat. |
 | Koneksi DB | `SetConnMaxLifetime 30 menit` — koneksi SQLite didaur ulang, tidak menggantung selamanya. |
+
+---
+
+## 16. Transaksi
+
+### Field request invoice
+
+```json
+POST /api/invoice
+{
+  "price": 15000,
+  "label": "Pulsa Telkomsel 10rb",   // opsional, untuk apa
+  "buyer": "08123456789"              // opsional, siapa pemesannya
+}
+```
+
+`label` dan `buyer` tersimpan di order, tampil di detail transaksi, laporan, dan ekspor CSV.
+
+### Riwayat status
+
+Setiap perubahan status dicatat di tabel `order_events`: dari status apa, ke status apa, oleh siapa (`system` / nama admin), catatan, dan waktu. Ditampilkan di halaman detail transaksi.
+
+```text
+pending → paid      (notif cocok, atau ditandai admin)
+pending → expired   (worker, lewat window)
+paid    → refunded  (admin)
+```
+
+### Batas invoice pending
+
+Batas **global** (semua token digabung), default **200**, bisa diubah di Konfigurasi → Pengaturan Invoice atau `PAYPAN_PENDING_LIMIT`.
+
+Bukan per token: satu integrator seperti AgenPulsa sah punya banyak order bersamaan. Tujuannya melindungi pool kode (999 per level), bukan membatasi satu klien. Lewat batas → `429`.
+
+### Ekspor CSV
+
+`GET /admin/export?from=YYYY-MM-DD&to=YYYY-MM-DD&status=paid`
+
+- Butuh session admin. Tanpa `from`/`to` = 30 hari terakhir.
+- Kolom: ID, waktu dibuat, status, harga, kode, total, untuk apa, pemesan, dibayar pada, link.
+- UTF-8 dengan BOM supaya Excel membaca benar.
+- Tombolnya ada di halaman **Laporan → Ekspor transaksi**.

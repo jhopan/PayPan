@@ -48,27 +48,29 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 				flash = "Gagal (bukan pending / tidak ada)"
 			}
 		case "refund":
-			res, err := s.db.Exec("UPDATE orders SET status='refunded' WHERE id=? AND status='paid'", id)
-			if err == nil {
-				if n, _ := res.RowsAffected(); n > 0 {
-					s.audit(s.adminUser(), "order.refund", id)
-					flash = "Order di-refund (dikembalikan pending tidak; status refunded)"
-				}
+			if s.setOrderStatus(id, "paid", "refunded", s.adminUser(), "refund oleh admin") {
+				s.audit(s.adminUser(), "order.refund", id)
+				flash = "Order di-refund (status refunded, kode bebas setelah cooldown)"
+			} else {
+				flash = "Gagal: order bukan paid"
 			}
 		case "expire":
-			s.db.Exec("UPDATE orders SET status='expired' WHERE id=? AND status='pending'", id)
-			s.audit(s.adminUser(), "order.expire", id)
-			flash = "Order di-expire-kan"
+			if s.setOrderStatus(id, "pending", "expired", s.adminUser(), "di-expire manual oleh admin") {
+				s.audit(s.adminUser(), "order.expire", id)
+				flash = "Order di-expire"
+			} else {
+				flash = "Gagal: order bukan pending"
+			}
 		}
 	}
 
-	var status string
+	var status, label, buyer string
 	var price, total, code int64
 	var createdAt, expiresAt int64
 	var paidAt sql.NullInt64
 	err := s.db.QueryRow(
-		"SELECT status,price,total,code,created_at,expires_at,paid_at FROM orders WHERE id=?", id).
-		Scan(&status, &price, &total, &code, &createdAt, &expiresAt, &paidAt)
+		"SELECT status,price,total,code,created_at,expires_at,paid_at,label,buyer FROM orders WHERE id=?", id).
+		Scan(&status, &price, &total, &code, &createdAt, &expiresAt, &paidAt, &label, &buyer)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -105,6 +107,8 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
 		b.WriteString(`<div class="card"><h2>Order <code>` + id + `</code></h2>
 <table><tr><th>Status</th><td><span class="badge ` + status + `">` + status + `</span></td></tr>
+<tr><th>Untuk apa</th><td>` + escOrDash(label) + `</td></tr>
+<tr><th>Pemesan</th><td>` + escOrDash(buyer) + `</td></tr>
 <tr><th>Harga</th><td class="money">Rp ` + itoa64(price) + `</td></tr>
 <tr><th>Kode unik</th><td>+` + itoa64(code) + `</td></tr>
 <tr><th>Total dibayar</th><td class="money"><b>Rp ` + itoa64(total) + `</b></td></tr>
@@ -117,6 +121,24 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 <form method="post" class="inline"><input type="hidden" name="act" value="expire"><button class="del">Expire-kan</button></form>
 </div>
 <small>Link checkout publik: <code>/pay/` + id + `</code></small></div>`)
+		// riwayat status
+		evs := s.orderEvents(id)
+		b.WriteString(`<div class="card"><h2>Riwayat status</h2>`)
+		if len(evs) == 0 {
+			b.WriteString(`<p style="font-size:13px;color:#98a2b3;margin:0">Belum ada perubahan status tercatat.</p>`)
+		} else {
+			b.WriteString(`<table><tr><th>Waktu</th><th>Perubahan</th><th>Oleh</th><th>Catatan</th></tr>`)
+			for _, e := range evs {
+				from := e.From
+				if from == "" {
+					from = "—"
+				}
+				b.WriteString(`<tr><td><small>` + fm(e.At) + `</small></td><td><code>` + esc(from) + `</code> → <span class="badge ` + esc(e.To) + `">` + esc(e.To) + `</span></td><td>` + esc(e.Actor) + `</td><td><small>` + escOrDash(e.Note) + `</small></td></tr>`)
+			}
+			b.WriteString(`</table>`)
+		}
+		b.WriteString(`</div>`)
+
 		b.WriteString(`<div class="card"><h2>Notif pembayaran terkait</h2>
 <table><tr><th>App</th><th>Judul</th><th>Isi</th><th>Diterima</th></tr>
 <tr><td><code>` + esc(payPkg) + `</code></td><td>` + esc(payTitle) + `</td><td>` + esc(payText) + `</td><td>` + fm(payAt.Int64) + `</td></tr></table></div>`)

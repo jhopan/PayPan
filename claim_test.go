@@ -13,7 +13,7 @@ func TestClaimOrderUniqueness(t *testing.T) {
 	s := &srv{db: db}
 	now := time.Now().Unix()
 
-	oid, code, total, exp, err := s.claimOrder(1000, 0)
+	oid, code, total, exp, err := s.claimOrder(1000, 0, "", "")
 	if err != nil {
 		t.Fatalf("claimOrder: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestClaimOrderUniqueness(t *testing.T) {
 	}
 
 	// order kedua di level sama harus dapat kode berbeda
-	_, code2, _, _, err := s.claimOrder(1000, 0)
+	_, code2, _, _, err := s.claimOrder(1000, 0, "", "")
 	if err != nil {
 		t.Fatalf("claimOrder kedua: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestClaimOrderParallelNoDuplicate(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, _, total, _, err := s.claimOrder(1000, 0)
+			_, _, total, _, err := s.claimOrder(1000, 0, "", "")
 			totals[i], errs[i] = total, err
 		}(i)
 	}

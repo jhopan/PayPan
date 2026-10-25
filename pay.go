@@ -247,6 +247,7 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 			s.writeJSON(w, 200, map[string]any{"ok": true, "matched": false, "reason": "already processed"})
 			return
 		}
+		s.logOrderEvent(oid, "pending", "paid", "system", fmt.Sprintf("notif %s Rp%d cocok", n.ID, *n.Amount))
 		var price, code int64
 		s.db.QueryRow("SELECT price,code FROM orders WHERE id=?", oid).Scan(&price, &code)
 		go s.notifyTGResult(fmt.Sprintf("✅ LUNAS Rp%d (order %s, kode %03d)", *n.Amount, oid, code), oid)
@@ -257,7 +258,8 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 
 type orderReq struct {
 	Price int64  `json:"price"`
-	Label string `json:"label"`
+	Label string `json:"label"` // keterangan: untuk apa
+	Buyer string `json:"buyer"` // pemesan: siapa
 }
 
 // POST /api/order — buat order (dari web/bot/API lain).
@@ -293,7 +295,7 @@ func (s *srv) createOrder(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, 400, map[string]string{"error": errResp})
 		return
 	}
-	oid, code, total, exp, err := s.claimOrder(q.Price, 0)
+	oid, code, total, exp, err := s.claimOrder(q.Price, 0, q.Label, q.Buyer)
 	if err != nil {
 		s.writeJSON(w, 503, map[string]string{"error": err.Error()})
 		return
@@ -323,7 +325,7 @@ func validatePrice(p int64) string {
 // claimOrder: klaim total eksklusif via transaksi IMMEDIATE.
 // Dipakai createOrder (kasir/API lama) dan createInvoice (API terstandarisasi).
 // createdBy = rowid aplikasi yang membuat (untuk limit pending-per-token), 0 = tidak diketahui.
-func (s *srv) claimOrder(price int64, createdBy int64) (oid string, code int, total int64, exp int64, err error) {
+func (s *srv) claimOrder(price int64, createdBy int64, label, buyer string) (oid string, code int, total int64, exp int64, err error) {
 	now := time.Now().Unix()
 	exp = now + tuning.InvoiceExpirySec()
 	for attempt := 0; attempt < 30; attempt++ {
@@ -340,8 +342,8 @@ func (s *srv) claimOrder(price int64, createdBy int64) (oid string, code int, to
 		total = price + int64(c)
 		oid = newOrderID()
 		res, txErr := tx.Exec(
-			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at,created_by) VALUES(?,?,?,?,'pending',?,?,?)",
-			oid, price, c, total, now, exp, createdBy)
+			"INSERT INTO orders(id,price,code,total,status,created_at,expires_at,created_by,label,buyer) VALUES(?,?,?,?,'pending',?,?,?,?,?)",
+			oid, price, c, total, now, exp, createdBy, label, buyer)
 		if txErr != nil {
 			tx.Rollback()
 			continue
@@ -400,7 +402,21 @@ func (s *srv) handleOrderStatus(w http.ResponseWriter, r *http.Request) {
 // expireWorker: tandai order pending lewat window sebagai expired (kode balik ke pool).
 func (s *srv) expireWorker() {
 	for range time.Tick(10 * time.Second) {
-		s.db.Exec("UPDATE orders SET status='expired' WHERE status='pending' AND expires_at<strftime('%s','now')")
+		rows, err := s.db.Query("SELECT id FROM orders WHERE status='pending' AND expires_at<strftime('%s','now')")
+		if err != nil {
+			continue
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil {
+				ids = append(ids, id)
+			}
+		}
+		rows.Close()
+		for _, id := range ids {
+			s.expireOrder(id)
+		}
 	}
 }
 
