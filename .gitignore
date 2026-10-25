@@ -6,6 +6,7 @@ paypan-server
 paypan-server.exe
 paypan-server.exe~
 server.log
+paypan-local.log
 qris_base.txt
 backup/
 
