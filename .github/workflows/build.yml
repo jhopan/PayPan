@@ -1,8 +1,20 @@
 name: Build & Release
 
+# Dua jenis release (pola PanRouter):
+#   1. Release berversi (vX.Y.Z) — riwayat permanen
+#   2. Release "latest"          — selalu build terbaru, URL stabil
+#
+# URL stabil:
+#   https://github.com/jhopan/PayPan/releases/latest/download/paypan-linux-amd64.tar.gz
+#   https://github.com/jhopan/PayPan/releases/latest/download/paypan-linux-arm64.tar.gz
+#   https://github.com/jhopan/PayPan/releases/latest/download/install.sh
+#
+# Versi baru:  git tag v1.2.0 && git push origin v1.2.0
+
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -15,110 +27,121 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
 
       - name: Vet
         run: go vet ./...
 
-      - name: Test build (linux amd64/arm64 + windows)
+      - name: Unit test
+        run: go test ./...
+
+      - name: Resolve version
+        id: ver
         run: |
-          GOOS=linux   GOARCH=amd64 go build -o dist/paypan-linux-amd64   .
-          GOOS=linux   GOARCH=arm64 go build -o dist/paypan-linux-arm64   .
-          GOOS=windows GOARCH=amd64 go build -o dist/paypan-windows-amd64.exe .
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V=$(git tag --list 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+            if [ -z "$V" ]; then V="${{ env.VERSION }}"; fi
+          fi
+          echo "VERSION=$V" >> "$GITHUB_OUTPUT"
+          echo "resolved: $V"
 
-      - name: Smoke test binary
+      - name: Build binaries
         run: |
-          ./dist/paypan-linux-amd64 --help 2>&1 | head -3 || true
-          file dist/paypan-linux-amd64 | grep -q "ELF 64-bit" && echo "linux amd64 binary OK"
-          file dist/paypan-linux-arm64 | grep -q "ELF 64-bit" && echo "linux arm64 binary OK"
-          file dist/paypan-windows-amd64.exe | grep -q "MS Windows" && echo "windows binary OK"
+          mkdir -p dist
+          GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/paypan-linux-amd64 .
+          GOOS=linux   GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/paypan-linux-arm64 .
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/paypan-windows-amd64.exe .
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: paypan-${{ env.VERSION }}
-          path: |
-            dist/paypan-linux-amd64
-            dist/paypan-linux-arm64
-            dist/paypan-windows-amd64.exe
+      - name: Smoke test
+        run: |
+          file dist/paypan-linux-amd64 | grep -q "ELF 64-bit" && echo "amd64 OK"
+          file dist/paypan-linux-arm64 | grep -q "ELF 64-bit" && echo "arm64 OK"
+          file dist/paypan-windows-amd64.exe | grep -q "MS Windows" && echo "windows OK"
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    if: startsWith(github.ref, 'refs/heads/master')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: paypan-${{ env.VERSION }}
-          path: dist
-
-      - name: Compress
+      - name: Package
         run: |
           cd dist
           tar czf paypan-linux-amd64.tar.gz paypan-linux-amd64
           tar czf paypan-linux-arm64.tar.gz paypan-linux-arm64
           sha256sum paypan-linux-amd64 paypan-linux-arm64 paypan-windows-amd64.exe > checksums.txt
-          cd ..
+          cp ../install.sh install.sh
+          chmod +x install.sh
+          ls -la
 
-      - name: Update rolling release
+      - name: Notes
         run: |
-          gh release delete v${{ env.VERSION }} --yes 2>/dev/null || true
-          git push origin :refs/tags/v${{ env.VERSION }} 2>/dev/null || true
-          gh release create v${{ env.VERSION }} \
-            dist/paypan-linux-amd64.tar.gz \
-            dist/paypan-linux-arm64.tar.gz \
-            dist/paypan-windows-amd64.exe \
-            dist/checksums.txt \
-            --title "Paypan Server v${{ env.VERSION }}" \
-            --latest \
-            --notes "$(cat <<'EOF'
-          ## Paypan Server v1.1.1
+          V="${{ steps.ver.outputs.VERSION }}"
+          PREV=$(git describe --tags --abbrev=0 "HEAD^" 2>/dev/null | grep -E '^v[0-9]' || true)
+          {
+            echo "## PayPan v${V}"
+            echo ""
+            echo "Server payment gateway QRIS — Go, single binary, SQLite murni."
+            echo ""
+            echo "### Perubahan"
+            echo ""
+            if [ -n "$PREV" ]; then git log --pretty=format:"- %s" "${PREV}..HEAD"; else git log --pretty=format:"- %s" HEAD~20..HEAD; fi
+            echo ""
+            echo ""
+            echo "### Aset"
+            echo ""
+            echo "| File | Platform |"
+            echo "|---|---|"
+            echo "| \`paypan-linux-amd64.tar.gz\` | Linux x86_64 |"
+            echo "| \`paypan-linux-arm64.tar.gz\` | Linux ARM64 (Armbian/STB) |"
+            echo "| \`paypan-windows-amd64.exe\` | Windows x64 |"
+            echo "| \`install.sh\` | Instalasi otomatis |"
+            echo "| \`checksums.txt\` | SHA256 |"
+            echo ""
+            echo "### Install"
+            echo ""
+            echo '```bash'
+            echo "curl -fsSL https://github.com/jhopan/PayPan/releases/latest/download/install.sh | bash"
+            echo '```'
+            echo ""
+            echo "Login default \`admin\`/\`admin123\` — wajib diganti."
+            echo "Docs: [README](https://github.com/jhopan/PayPan#readme) · [API](https://github.com/jhopan/PayPan/blob/master/API.md) · [ENV](https://github.com/jhopan/PayPan/blob/master/ENV.md)"
+          } > /tmp/notes.md
+          head -20 /tmp/notes.md
 
-          Binary server payment gateway QRIS (Go, single file, SQLite murni tanpa CGO).
-
-          | File | Platform |
-          |---|---|
-          | `paypan-linux-amd64.tar.gz` | Linux 64-bit x86 (VPS / systemd) |
-          | `paypan-linux-arm64.tar.gz` | Linux 64-bit ARM (armbian / Raspberry Pi / STB) |
-          | `paypan-windows-amd64.exe` | Windows 64-bit |
-          | `checksums.txt` | SHA256 semua binary |
-
-          ### Fitur
-          - QRIS statis → dinamis (inject tag 54 nominal + recompute CRC16)
-          - Kode unik per level harga: 1000→1001, 2000→2001 (klaim eksklusif, race-proof)
-          - Match exact + idempoten; unmatched tersimpan untuk reconcile manual
-          - Expiry & cooldown kode bisa diatur dari web admin (default 5 menit / 2 jam; paid permanen)
-          - Limit pending per token + rate limit API, keduanya bisa di-tuning via env
-          - Konfigurasi runtime via env (PAYPAN_ADDR, PAYPAN_DB, PAYPAN_*) — lihat ENV.md
-          - QRIS hash pinning: anti-tamper `qris_base.txt` + alarm Telegram
-          - Web admin: Dashboard, Kasir, Aplikasi & Token (scope per-app), Log, Laporan, Backup & Restore, Konfigurasi
-          - Webhook `order.paid` + HMAC-SHA256 per-webhook secret + retry 2x
-          - Notifikasi Telegram multi-chat + retry + alert kegagalan
-          - Backup DB otomatis tiap 1 jam (overwrite `paypan-hourly.db`, tidak menumpuk)
-          - Backup Google Sheets opsional (1 spreadsheet/tahun, tab per bulan, blok per minggu)
-
-          ### Deploy cepat (Linux VPS)
-          ```bash
-          tar xzf paypan-linux-amd64.tar.gz
-          chmod +x paypan-linux-amd64
-          # QRIS statis payload di file qris_base.txt (atau upload via web admin)
-          PAYPAN_ADDR=:9090 PAYPAN_DB=/var/lib/paypan/paypan.db ./paypan-linux-amd64
-          ```
-
-          Login admin default: `admin` / `admin123` — **WAJIB ganti setelah login pertama**
-          (menu Konfigurasi). Token `master` bawaan juga wajib di-rotate dari menu Aplikasi.
-
-          Lengkapnya lihat [API.md](https://github.com/jhopan/PayPan/blob/master/API.md) dan [README.md](https://github.com/jhopan/PayPan#readme).
-          EOF
-          )"
+      - name: Versioned release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="${{ steps.ver.outputs.VERSION }}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            gh release delete "v${V}" --yes 2>/dev/null || true
+            gh release create "v${V}" --title "PayPan v${V}" --notes-file /tmp/notes.md \
+              dist/paypan-linux-amd64.tar.gz dist/paypan-linux-arm64.tar.gz \
+              dist/paypan-windows-amd64.exe dist/install.sh dist/checksums.txt
+          elif ! gh release view "v${V}" >/dev/null 2>&1; then
+            gh release create "v${V}" --title "PayPan v${V}" --notes-file /tmp/notes.md \
+              dist/paypan-linux-amd64.tar.gz dist/paypan-linux-arm64.tar.gz \
+              dist/paypan-windows-amd64.exe dist/install.sh dist/checksums.txt
+          else
+            echo "release v${V} sudah ada — lewati"
+          fi
+
+      - name: Latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="${{ steps.ver.outputs.VERSION }}"
+          gh release delete latest --yes 2>/dev/null || true
+          gh release create latest --title "Latest build" --latest \
+            --notes "Build terbaru PayPan — saat ini **v${V}**.
+
+          URL stabil:
+          - \`releases/latest/download/paypan-linux-amd64.tar.gz\`
+          - \`releases/latest/download/paypan-linux-arm64.tar.gz\`
+          - \`releases/latest/download/install.sh\`
+
+          Install: \`curl -fsSL https://github.com/jhopan/PayPan/releases/latest/download/install.sh | bash\`" \
+            dist/paypan-linux-amd64.tar.gz dist/paypan-linux-arm64.tar.gz \
+            dist/paypan-windows-amd64.exe dist/install.sh dist/checksums.txt

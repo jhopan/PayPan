@@ -22,7 +22,9 @@ INSTALL_DIR="/opt/paypan"
 DATA_DIR="/var/lib/paypan"
 BIN="$INSTALL_DIR/paypan"
 SERVICE="paypan"
-VERSION="${PAYPAN_VERSION:-1.1.1}"
+# Kosong = pakai build "latest" (URL stabil, selalu terbaru).
+# Set PAYPAN_VERSION=1.2.0 untuk memasang versi tertentu.
+VERSION="${PAYPAN_VERSION:-}"
 
 # ---------- helper ----------
 R="\033[0m"; G="\033[1;32m"; Y="\033[1;33m"; RED="\033[1;31m"; C="\033[1;36m"
@@ -81,12 +83,20 @@ detect_platform() {
 
 download_release() {
   local platform="$1"
-  local url="https://github.com/${REPO}/releases/download/v${VERSION}/paypan-linux-${platform##*-}.tar.gz"
-  say "Download Paypan v${VERSION} dari GitHub Releases..."
+  local arch="${platform##*-}"
+  local url
+  if [[ -z "$VERSION" ]]; then
+    # URL stabil: selalu build terbaru, tidak berubah antar versi
+    url="https://github.com/${REPO}/releases/latest/download/paypan-linux-${arch}.tar.gz"
+    say "Download Paypan (latest) dari GitHub Releases..."
+  else
+    url="https://github.com/${REPO}/releases/download/v${VERSION}/paypan-linux-${arch}.tar.gz"
+    say "Download Paypan v${VERSION} dari GitHub Releases..."
+  fi
   say "  $url"
   mkdir -p "$INSTALL_DIR" "$DATA_DIR"
   curl -fsSL "$url" | tar xz -C "$INSTALL_DIR"
-  mv "$INSTALL_DIR/paypan-linux-${platform##*-}" "$BIN"
+  mv "$INSTALL_DIR/paypan-linux-${arch}" "$BIN"
   chmod +x "$BIN"
   say "Binary terpasang: $BIN"
 }
