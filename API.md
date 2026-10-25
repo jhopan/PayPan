@@ -395,7 +395,6 @@ Bukan per token: satu integrator seperti AgenPulsa sah punya banyak order bersam
 Filter: bulan, **aplikasi**, dan **kata kunci** (ID / label / pemesan).
 
 - **Ekspor CSV** — `/admin/export?from=&to=&status=`
-- **Cetak / PDF** — `/admin/laporan/cetak?bulan=YYYY-MM` (halaman print-friendly; simpan sebagai PDF dari browser)
 - **Hapus per bulan** — dengan konfirmasi dan jumlah transaksi
 - **Hapus semua** — wajib ketik `HAPUS`
 

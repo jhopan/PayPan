@@ -69,11 +69,9 @@ ck("filter app=app-a hanya app-a", "app-a" in lapA and "app-b" not in lapA, "app
 lapQ = op.open(BASE + "/admin/laporan?q=Token+B").read().decode()
 ck("cari 'Token B' menemukan order", "Token B" in lapQ)
 
-# 5. cetak / PDF
-pdf = op.open(BASE + "/admin/laporan/cetak").read().decode()
-ck("halaman cetak render", "Laporan Transaksi Paypan" in pdf)
-ck("cetak memuat tabel transaksi", "Total" in pdf and "transaksi" in pdf)
-ck("cetak memuat label", "Pulsa A" in pdf)
+# 5. tombol cetak sudah dihapus
+lap = op.open(BASE + "/admin/laporan").read().decode()
+ck("tombol Cetak/PDF sudah tidak ada", "Cetak / PDF" not in lap)
 
 # 6. retry webhook
 db.execute("delete from webhooks")

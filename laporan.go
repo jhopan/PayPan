@@ -255,8 +255,7 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 <input type="date" name="to" value="` + todayStr + `" style="margin:0"></div>
 <div><label style="display:block;font-size:12px;color:#344054;font-weight:600;margin-bottom:4px">Status</label>
 <select name="status" style="margin:0"><option value="">semua</option><option value="paid">paid</option><option value="pending">pending</option><option value="expired">expired</option><option value="refunded">refunded</option></select></div>
-<button>Unduh CSV</button>
-<a class="pg" href="/admin/laporan/cetak?bulan=` + curMonth + `" target="_blank" style="align-self:center">Cetak / PDF</a></form>
+<button>Unduh CSV</button></form>
 <small>CSV bisa dibuka di Excel/Google Sheets. Kolom: ID, waktu, status, harga, kode, total, untuk apa, pemesan, dibayar, link.</small></div>`)
 
 		// ---- Hapus per bulan (dengan jumlah) ----

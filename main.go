@@ -143,7 +143,6 @@ func main() {
 	mux.HandleFunc("/admin/laporan", s.requireAdminCSRF(s.handleAdminLaporan))
 	mux.HandleFunc("/admin/backup", s.requireAdminCSRF(s.handleAdminBackup))
 	mux.HandleFunc("/admin/export", s.handleExport)
-	mux.HandleFunc("/admin/laporan/cetak", s.handleReportPDF)
 	mux.HandleFunc("/admin/webhook/retry", s.requireAdminCSRF(s.handleWebhookRetry))
 	mux.HandleFunc("/admin/tx/", s.requireAdminCSRF(s.handleTxDetail))
 	mux.HandleFunc("/admin", s.requireAdminCSRF(s.handleAdminHome))
