@@ -25,6 +25,9 @@ type orderLite struct {
 	Price     int64
 	Total     int64
 	CreatedAt int64
+	Label     string
+	Buyer     string
+	App       string
 }
 
 type payLite struct {
@@ -54,7 +57,9 @@ type unmatchCand struct {
 }
 
 func (s *srv) recentOrders(n int) []orderLite {
-	rows, err := s.db.Query("SELECT id,status,price,total,created_at FROM orders ORDER BY created_at DESC LIMIT ?", n)
+	rows, err := s.db.Query(`SELECT o.id,o.status,o.price,o.total,o.created_at,o.label,o.buyer,COALESCE(a.name,'')
+		FROM orders o LEFT JOIN apps a ON a.rowid=o.created_by
+		ORDER BY o.created_at DESC LIMIT ?`, n)
 	if err != nil {
 		return nil
 	}
@@ -62,7 +67,7 @@ func (s *srv) recentOrders(n int) []orderLite {
 	var out []orderLite
 	for rows.Next() {
 		var o orderLite
-		if rows.Scan(&o.ID, &o.Status, &o.Price, &o.Total, &o.CreatedAt) == nil {
+		if rows.Scan(&o.ID, &o.Status, &o.Price, &o.Total, &o.CreatedAt, &o.Label, &o.Buyer, &o.App) == nil {
 			out = append(out, o)
 		}
 	}

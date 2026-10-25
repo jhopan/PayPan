@@ -282,13 +282,18 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		// transaksi lunas + detail + hapus -> DI LAPORAN
 		// order terakhir: rapi + rupiah + waktu
 		b.WriteString(`<div class="card"><h2>Order terakhir</h2><table>
-<tr><th>Waktu</th><th>ID</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th></th></tr>`)
+<tr><th>Waktu</th><th>Untuk apa</th><th>Pemesan</th><th>Diminta oleh</th><th>Status</th><th class="money">Total</th><th></th></tr>`)
 		if len(orders) == 0 {
-			b.WriteString(`<tr><td colspan="6" class="empty">Belum ada order</td></tr>`)
+			b.WriteString(`<tr><td colspan="7" class="empty">Belum ada order</td></tr>`)
 		}
 		for _, o := range orders {
-			t := o.CreatedAt
-			b.WriteString(`<tr><td><small>` + timeFmt(t) + `</small></td><td><code>` + esc(o.ID) + `</code></td><td><span class="badge ` + o.Status + `">` + o.Status + `</span></td><td class="money">` + rp(o.Price) + `</td><td class="money"><b>` + rp(o.Total) + `</b></td><td><a class="pg" href="/admin/tx/` + esc(o.ID) + `">detail →</a></td></tr>`)
+			b.WriteString(`<tr><td><small>` + timeFmt(o.CreatedAt) + `</small></td>` +
+				`<td>` + escOrDash(o.Label) + `</td>` +
+				`<td><small>` + escOrDash(o.Buyer) + `</small></td>` +
+				`<td><small>` + escOrDash(o.App) + `</small></td>` +
+				`<td><span class="badge ` + o.Status + `">` + o.Status + `</span></td>` +
+				`<td class="money"><b>` + rp(o.Total) + `</b></td>` +
+				`<td><a class="pg" href="/admin/tx/` + esc(o.ID) + `">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
 		// notif terakhir
