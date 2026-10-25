@@ -46,13 +46,31 @@ Webhook (site lain) ◄───────────────────
 | `/admin/kasir` | session admin | kasir (input nominal → QR) |
 | `/admin` | session | dashboard admin |
 
-## Install 1 perintah (Linux VPS)
+## Install 1 perintah (Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jhopan/PayPan/master/install.sh | bash
+curl -fsSL https://github.com/jhopan/PayPan/releases/latest/download/install.sh | bash
 ```
 
+URL ini **stabil** — selalu menunjuk build terbaru, tidak berubah antar versi.
+
 Installer otomatis: cek dependencies → download binary siap pakai dari GitHub Releases → systemd service → setup QRIS → pilih tunnel (Cloudflare/ngrok/Caddy/Nginx) → pasang menu kontrol `menupaypan`.
+
+### Pasang versi tertentu
+
+```bash
+PAYPAN_VERSION=1.1.1 curl -fsSL https://github.com/jhopan/PayPan/releases/latest/download/install.sh | bash
+```
+
+### Unduh manual
+
+| File | Platform | URL stabil |
+|---|---|---|
+| `paypan-linux-amd64.tar.gz` | Linux x86_64 | `releases/latest/download/paypan-linux-amd64.tar.gz` |
+| `paypan-linux-arm64.tar.gz` | Linux ARM64 (Armbian/STB) | `releases/latest/download/paypan-linux-arm64.tar.gz` |
+| `paypan-windows-amd64.exe` | Windows x64 | `releases/latest/download/paypan-windows-amd64.exe` |
+
+Daftar versi lengkap: [releases](https://github.com/jhopan/PayPan/releases).
 
 Setelah terpasang, ketik `menupaypan` di terminal mana pun (auto-buka menu):
 
