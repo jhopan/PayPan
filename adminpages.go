@@ -268,6 +268,8 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 	orders := s.recentOrders(15)
 	pays := s.recentPayments(10)
 	unm := s.recentUnmatched(8)
+	appStats := s.appStatsToday()
+	daily := s.dailyStats(7)
 
 	s.renderPage(w, r, "dash", "Dashboard", flash, func() template.HTML {
 		var b strings.Builder
@@ -296,6 +298,41 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 				`<td><a class="pg" href="/admin/tx/` + esc(o.ID) + `">detail →</a></td></tr>`)
 		}
 		b.WriteString(`</table></div>`)
+
+		// ---- ringkasan per aplikasi (hari ini) ----
+		b.WriteString(`<div class="card"><h2>Hari ini per aplikasi</h2><table>
+<tr><th>Aplikasi</th><th>Order</th><th>Lunas</th><th>Pending</th><th class="money">Omzet</th></tr>`)
+		if len(appStats) == 0 {
+			b.WriteString(`<tr><td colspan="5" class="empty">Belum ada order hari ini</td></tr>`)
+		}
+		for _, a := range appStats {
+			b.WriteString(`<tr><td><b>` + esc(a.Name) + `</b></td><td>` + itoa64(a.Total) + `</td><td>` + itoa64(a.Paid) +
+				`</td><td>` + itoa64(a.Pend) + `</td><td class="money"><b>` + rp(a.Sum) + `</b></td></tr>`)
+		}
+		b.WriteString(`</table></div>`)
+
+		// ---- tren 7 hari (bar sederhana, tanpa JS) ----
+		if len(daily) > 0 {
+			var maxSum int64 = 1
+			for _, d := range daily {
+				if d.Sum > maxSum {
+					maxSum = d.Sum
+				}
+			}
+			b.WriteString(`<div class="card"><h2>Tren 7 hari</h2><table>
+<tr><th>Tanggal</th><th>Transaksi</th><th class="money">Omzet</th><th style="width:45%">Grafik</th></tr>`)
+			for _, d := range daily {
+				pct := int(d.Sum * 100 / maxSum)
+				if pct < 2 && d.Sum > 0 {
+					pct = 2
+				}
+				b.WriteString(`<tr><td><small>` + esc(d.Day) + `</small></td><td>` + itoa64(d.Count) +
+					`</td><td class="money">` + rp(d.Sum) +
+					`</td><td><div style="background:#e4e7ec;border-radius:4px;height:10px"><div style="background:#1a7f37;height:10px;border-radius:4px;width:` + itoa(pct) + `%"></div></div></td></tr>`)
+			}
+			b.WriteString(`</table></div>`)
+		}
+
 		// notif terakhir
 		b.WriteString(`<div class="card"><h2>Notif terakhir</h2><table>
 <tr><th>Waktu</th><th>App</th><th>Judul</th><th class="money">Amount</th></tr>`)
@@ -311,6 +348,16 @@ func (s *srv) handleAdminHome(w http.ResponseWriter, r *http.Request) {
 		}
 		b.WriteString(`</table></div>`)
 		if len(unm) > 0 {
+			groups := s.unmatchedSummary(5)
+			if len(groups) > 0 {
+				b.WriteString(`<div class="card"><h2>Unmatched per nominal</h2><table>
+<tr><th class="money">Nominal</th><th>Jumlah notif</th><th>Terakhir</th></tr>`)
+				for _, g := range groups {
+					b.WriteString(`<tr><td class="money">` + rp(g.Amount) + `</td><td>` + itoa64(g.Count) +
+						`</td><td><small>` + timeFmt(g.LastAt) + `</small></td></tr>`)
+				}
+				b.WriteString(`</table></div>`)
+			}
 			b.WriteString(`<div class="card"><h2>Unmatched</h2>
 <p style="font-size:12px;color:#98a2b3;margin:0 0 10px">Notif masuk yang tidak menemukan order pending — biasanya karena pembayaran lewat dari window. Cocokkan ke order yang nominalnya sama, atau abaikan.</p>
 <table><tr><th>Waktu</th><th class="money">Amount</th><th>Alasan</th><th>Aksi</th></tr>`)

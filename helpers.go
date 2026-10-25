@@ -119,6 +119,30 @@ func (s *srv) recentUnmatched(n int) []unmatchLite {
 	return out
 }
 
+// unmatchedSummary: kelompokkan unmatched per nominal, hitung berapa kali.
+type unmatchedGroup struct {
+	Amount int64
+	Count  int64
+	LastAt int64
+}
+
+func (s *srv) unmatchedSummary(limit int) []unmatchedGroup {
+	rows, err := s.db.Query(`SELECT amount, COUNT(*), MAX(received_at)
+		FROM unmatched GROUP BY amount ORDER BY MAX(received_at) DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []unmatchedGroup
+	for rows.Next() {
+		var g unmatchedGroup
+		if rows.Scan(&g.Amount, &g.Count, &g.LastAt) == nil {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
 // candidateOrders: order dengan total persis sama yang masih bisa ditindaklanjuti.
 // Dipakai tombol "Cocokkan" di dashboard untuk notif yang telat masuk.
 func (s *srv) candidateOrders(total int64) []unmatchCand {

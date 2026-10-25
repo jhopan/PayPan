@@ -250,7 +250,22 @@ func (s *srv) handleNotif(w http.ResponseWriter, r *http.Request) {
 		s.logOrderEvent(oid, "pending", "paid", "system", fmt.Sprintf("notif %s Rp%d cocok", n.ID, *n.Amount))
 		var price, code int64
 		s.db.QueryRow("SELECT price,code FROM orders WHERE id=?", oid).Scan(&price, &code)
-		go s.notifyTGResult(fmt.Sprintf("✅ LUNAS Rp%d (order %s, kode %03d)", *n.Amount, oid, code), oid)
+		// pesan Telegram informatif: nominal, untuk apa, dari aplikasi mana
+		var tgLabel, tgBuyer, tgApp string
+		s.db.QueryRow(`SELECT o.label,o.buyer,COALESCE(a.name,'') FROM orders o
+			LEFT JOIN apps a ON a.rowid=o.created_by WHERE o.id=?`, oid).Scan(&tgLabel, &tgBuyer, &tgApp)
+		tgMsg := fmt.Sprintf("✅ LUNAS Rp%d", *n.Amount)
+		if tgLabel != "" {
+			tgMsg += " · " + tgLabel
+		}
+		if tgBuyer != "" {
+			tgMsg += " · " + tgBuyer
+		}
+		if tgApp != "" {
+			tgMsg += " · via " + tgApp
+		}
+		tgMsg += fmt.Sprintf(" (kode %03d)", code)
+		go s.notifyTGResult(tgMsg, oid)
 		go s.fireWebhooks(oid, *n.Amount)
 		s.writeJSON(w, 200, map[string]any{"ok": true, "matched": true, "order": oid})
 	}

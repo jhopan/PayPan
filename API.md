@@ -376,3 +376,37 @@ Bukan per token: satu integrator seperti AgenPulsa sah punya banyak order bersam
 - Kolom: ID, waktu dibuat, status, harga, kode, total, untuk apa, pemesan, dibayar pada, link.
 - UTF-8 dengan BOM supaya Excel membaca benar.
 - Tombolnya ada di halaman **Laporan → Ekspor transaksi**.
+
+---
+
+## 17. Dashboard & laporan
+
+### Dashboard
+
+- Stat tile: lunas, pending, expired, notif diterima, unmatched.
+- **Order terakhir**: waktu, untuk apa, pemesan, diminta oleh, status, total.
+- **Hari ini per aplikasi**: order, lunas, pending, omzet per aplikasi (hari berjalan).
+- **Tren 7 hari**: bar omzet harian (CSS murni, tanpa JS).
+- **Unmatched per nominal**: nominal yang berulang tidak cocok, beserta jumlahnya.
+- **Unmatched**: tombol Cocokkan / Abaikan.
+
+### Laporan
+
+Filter: bulan, **aplikasi**, dan **kata kunci** (ID / label / pemesan).
+
+- **Ekspor CSV** — `/admin/export?from=&to=&status=`
+- **Cetak / PDF** — `/admin/laporan/cetak?bulan=YYYY-MM` (halaman print-friendly; simpan sebagai PDF dari browser)
+- **Hapus per bulan** — dengan konfirmasi dan jumlah transaksi
+- **Hapus semua** — wajib ketik `HAPUS`
+
+### Kirim ulang webhook
+
+Tombol **Kirim ulang webhook** di detail transaksi memasukkan ulang `order.paid` ke antrean retry. Dipakai kalau penerima sempat mati dan percobaan sudah menyerah.
+
+### Notifikasi Telegram
+
+Pesan lunas kini memuat konteks:
+
+```
+✅ LUNAS Rp6501 · Pulsa Telkomsel 10rb · 08123456789 · via agenpulsa (kode 005)
+```

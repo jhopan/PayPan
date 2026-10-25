@@ -134,6 +134,15 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 			listArgs = append(listArgs, start.Unix(), start.AddDate(0, 1, 0).Unix()-1)
 		}
 	}
+	if appFilter := r.URL.Query().Get("app"); appFilter != "" {
+		listQ += ` AND COALESCE(a.name,'')=?`
+		listArgs = append(listArgs, appFilter)
+	}
+	if kw := strings.TrimSpace(r.URL.Query().Get("q")); kw != "" {
+		listQ += ` AND (o.id LIKE ? OR o.label LIKE ? OR o.buyer LIKE ?)`
+		like := "%" + kw + "%"
+		listArgs = append(listArgs, like, like, like)
+	}
 	listQ += ` ORDER BY paid_at DESC LIMIT 50`
 	txRows, err := s.db.Query(listQ, listArgs...)
 	type txRow struct {
@@ -213,6 +222,8 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 			}
 			return curMonth
 		})() + `" style="margin:0">
+<input name="app" placeholder="aplikasi" value="` + esc(r.URL.Query().Get("app")) + `" style="margin:0;width:130px">
+<input name="q" placeholder="cari ID / label / pemesan" value="` + esc(r.URL.Query().Get("q")) + `" style="margin:0;width:200px">
 <button class="sec">Filter</button>
 <a class="pg" href="/admin/laporan" style="margin-left:8px">Semua</a></form>
 <table><tr><th>Waktu</th><th>ID</th><th>Diminta oleh</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th>Aksi</th></tr>`)
@@ -244,7 +255,8 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 <input type="date" name="to" value="` + todayStr + `" style="margin:0"></div>
 <div><label style="display:block;font-size:12px;color:#344054;font-weight:600;margin-bottom:4px">Status</label>
 <select name="status" style="margin:0"><option value="">semua</option><option value="paid">paid</option><option value="pending">pending</option><option value="expired">expired</option><option value="refunded">refunded</option></select></div>
-<button>Unduh CSV</button></form>
+<button>Unduh CSV</button>
+<a class="pg" href="/admin/laporan/cetak?bulan=` + curMonth + `" target="_blank" style="align-self:center">Cetak / PDF</a></form>
 <small>CSV bisa dibuka di Excel/Google Sheets. Kolom: ID, waktu, status, harga, kode, total, untuk apa, pemesan, dibayar, link.</small></div>`)
 
 		// ---- Hapus per bulan (dengan jumlah) ----

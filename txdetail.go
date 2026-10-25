@@ -122,6 +122,7 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 <form method="post" class="inline"><input type="hidden" name="act" value="markpaid"><button>Tandai LUNAS manual</button></form>
 <form method="post" class="inline"><input type="hidden" name="act" value="refund"><button class="sec">Refund (paid→refunded)</button></form>
 <form method="post" class="inline"><input type="hidden" name="act" value="expire"><button class="del">Expire-kan</button></form>
+<form method="post" action="/admin/webhook/retry" class="inline"><input type="hidden" name="order_id" value="` + esc(id) + `"><button class="sec">Kirim ulang webhook</button></form>
 </div>
 <small>Link checkout publik: <code>/pay/` + id + `</code></small></div>`)
 		// riwayat status
