@@ -70,6 +70,9 @@ jobs:
           cd dist
           tar czf paypan-linux-amd64.tar.gz paypan-linux-amd64
           tar czf paypan-linux-arm64.tar.gz paypan-linux-arm64
+          # nama stabil ala PanRouter: selalu menunjuk build terbaru
+          cp paypan-linux-amd64.tar.gz paypan-linux-amd64-latest.tar.gz
+          cp paypan-linux-arm64.tar.gz paypan-linux-arm64-latest.tar.gz
           sha256sum paypan-linux-amd64 paypan-linux-arm64 paypan-windows-amd64.exe > checksums.txt
           cp ../install.sh install.sh
           chmod +x install.sh
@@ -119,10 +122,12 @@ jobs:
             gh release delete "v${V}" --yes 2>/dev/null || true
             gh release create "v${V}" --title "PayPan v${V}" --notes-file /tmp/notes.md \
               dist/paypan-linux-amd64.tar.gz dist/paypan-linux-arm64.tar.gz \
+              dist/paypan-linux-amd64-latest.tar.gz dist/paypan-linux-arm64-latest.tar.gz \
               dist/paypan-windows-amd64.exe dist/install.sh dist/checksums.txt
           elif ! gh release view "v${V}" >/dev/null 2>&1; then
             gh release create "v${V}" --title "PayPan v${V}" --notes-file /tmp/notes.md \
               dist/paypan-linux-amd64.tar.gz dist/paypan-linux-arm64.tar.gz \
+              dist/paypan-linux-amd64-latest.tar.gz dist/paypan-linux-arm64-latest.tar.gz \
               dist/paypan-windows-amd64.exe dist/install.sh dist/checksums.txt
           else
             echo "release v${V} sudah ada — lewati"
@@ -144,4 +149,5 @@ jobs:
 
           Install: \`curl -fsSL https://github.com/jhopan/PayPan/releases/latest/download/install.sh | bash\`" \
             dist/paypan-linux-amd64.tar.gz dist/paypan-linux-arm64.tar.gz \
+            dist/paypan-linux-amd64-latest.tar.gz dist/paypan-linux-arm64-latest.tar.gz \
             dist/paypan-windows-amd64.exe dist/install.sh dist/checksums.txt

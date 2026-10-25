@@ -56,21 +56,15 @@ URL ini **stabil** — selalu menunjuk build terbaru, tidak berubah antar versi.
 
 Installer otomatis: cek dependencies → download binary siap pakai dari GitHub Releases → systemd service → setup QRIS → pilih tunnel (Cloudflare/ngrok/Caddy/Nginx) → pasang menu kontrol `menupaypan`.
 
-### Pasang versi tertentu
-
-```bash
-PAYPAN_VERSION=1.1.1 curl -fsSL https://github.com/jhopan/PayPan/releases/latest/download/install.sh | bash
-```
-
 ### Unduh manual
 
 | File | Platform | URL stabil |
 |---|---|---|
-| `paypan-linux-amd64.tar.gz` | Linux x86_64 | `releases/latest/download/paypan-linux-amd64.tar.gz` |
-| `paypan-linux-arm64.tar.gz` | Linux ARM64 (Armbian/STB) | `releases/latest/download/paypan-linux-arm64.tar.gz` |
+| `paypan-linux-amd64-latest.tar.gz` | Linux x86_64 | `releases/latest/download/paypan-linux-amd64-latest.tar.gz` |
+| `paypan-linux-arm64-latest.tar.gz` | Linux ARM64 (Armbian/STB) | `releases/latest/download/paypan-linux-arm64-latest.tar.gz` |
 | `paypan-windows-amd64.exe` | Windows x64 | `releases/latest/download/paypan-windows-amd64.exe` |
 
-Daftar versi lengkap: [releases](https://github.com/jhopan/PayPan/releases).
+Untuk versi tertentu, buka [daftar release](https://github.com/jhopan/PayPan/releases) dan pilih aset `paypan-linux-amd64.tar.gz` pada tag yang diinginkan.
 
 Setelah terpasang, ketik `menupaypan` di terminal mana pun (auto-buka menu):
 

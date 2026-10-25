@@ -22,9 +22,10 @@ INSTALL_DIR="/opt/paypan"
 DATA_DIR="/var/lib/paypan"
 BIN="$INSTALL_DIR/paypan"
 SERVICE="paypan"
-# Kosong = pakai build "latest" (URL stabil, selalu terbaru).
-# Set PAYPAN_VERSION=1.2.0 untuk memasang versi tertentu.
-VERSION="${PAYPAN_VERSION:-}"
+# Installer ini SELALU mengambil build "latest" — URL stabil, tidak perlu
+# tahu nomor versi. Untuk memasang versi tertentu, unduh manual dari
+# https://github.com/jhopan/PayPan/releases
+LATEST_URL="https://github.com/jhopan/PayPan/releases/latest/download"
 
 # ---------- helper ----------
 R="\033[0m"; G="\033[1;32m"; Y="\033[1;33m"; RED="\033[1;31m"; C="\033[1;36m"
@@ -84,15 +85,9 @@ detect_platform() {
 download_release() {
   local platform="$1"
   local arch="${platform##*-}"
-  local url
-  if [[ -z "$VERSION" ]]; then
-    # URL stabil: selalu build terbaru, tidak berubah antar versi
-    url="https://github.com/${REPO}/releases/latest/download/paypan-linux-${arch}.tar.gz"
-    say "Download Paypan (latest) dari GitHub Releases..."
-  else
-    url="https://github.com/${REPO}/releases/download/v${VERSION}/paypan-linux-${arch}.tar.gz"
-    say "Download Paypan v${VERSION} dari GitHub Releases..."
-  fi
+  # aset ber-nama "-latest" selalu menunjuk build terbaru (pola PanRouter)
+  local url="${LATEST_URL}/paypan-linux-${arch}-latest.tar.gz"
+  say "Download Paypan (latest) dari GitHub Releases..."
   say "  $url"
   mkdir -p "$INSTALL_DIR" "$DATA_DIR"
   curl -fsSL "$url" | tar xz -C "$INSTALL_DIR"
@@ -362,7 +357,7 @@ tunnel_menu() {
 }
 
 update_binary() {
-  say "Update binary ke v${VERSION}..."
+  say "Update binary ke build terbaru..."
   systemctl stop "${SERVICE}" 2>/dev/null || true
   download_release "$(detect_platform)"
   systemctl start "${SERVICE}"
@@ -383,7 +378,7 @@ uninstall() {
 
 # ---------- main ----------
 main() {
-  echo -e "${C}PayPan installer v${VERSION}${R}"
+  echo -e "${C}PayPan installer (latest)${R}"
   need_root
   ensure_deps
   local platform
