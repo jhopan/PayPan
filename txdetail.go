@@ -68,9 +68,11 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 	var price, total, code int64
 	var createdAt, expiresAt int64
 	var paidAt sql.NullInt64
+	var appName sql.NullString
 	err := s.db.QueryRow(
-		"SELECT status,price,total,code,created_at,expires_at,paid_at,label,buyer FROM orders WHERE id=?", id).
-		Scan(&status, &price, &total, &code, &createdAt, &expiresAt, &paidAt, &label, &buyer)
+		`SELECT o.status,o.price,o.total,o.code,o.created_at,o.expires_at,o.paid_at,o.label,o.buyer,a.name
+		 FROM orders o LEFT JOIN apps a ON a.rowid=o.created_by WHERE o.id=?`, id).
+		Scan(&status, &price, &total, &code, &createdAt, &expiresAt, &paidAt, &label, &buyer, &appName)
 	if err == sql.ErrNoRows {
 		http.NotFound(w, r)
 		return
@@ -109,6 +111,7 @@ func (s *srv) handleTxDetail(w http.ResponseWriter, r *http.Request) {
 <table><tr><th>Status</th><td><span class="badge ` + status + `">` + status + `</span></td></tr>
 <tr><th>Untuk apa</th><td>` + escOrDash(label) + `</td></tr>
 <tr><th>Pemesan</th><td>` + escOrDash(buyer) + `</td></tr>
+<tr><th>Diminta oleh</th><td>` + escOrDash(appName.String) + `</td></tr>
 <tr><th>Harga</th><td class="money">Rp ` + itoa64(price) + `</td></tr>
 <tr><th>Kode unik</th><td>+` + itoa64(code) + `</td></tr>
 <tr><th>Total dibayar</th><td class="money"><b>Rp ` + itoa64(total) + `</b></td></tr>

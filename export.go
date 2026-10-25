@@ -34,14 +34,14 @@ func (s *srv) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 	status := r.URL.Query().Get("status")
 
-	q := `SELECT id,price,code,total,status,label,buyer,created_at,expires_at,COALESCE(paid_at,0)
-		FROM orders WHERE created_at>=? AND created_at<?`
+	q := `SELECT o.id,o.price,o.code,o.total,o.status,o.label,o.buyer,o.created_at,o.expires_at,COALESCE(o.paid_at,0),COALESCE(a.name,'')
+		FROM orders o LEFT JOIN apps a ON a.rowid=o.created_by WHERE o.created_at>=? AND o.created_at<?`
 	args := []any{from.Unix(), to.Unix()}
 	if status != "" {
-		q += " AND status=?"
+		q += " AND o.status=?"
 		args = append(args, status)
 	}
-	q += " ORDER BY created_at DESC"
+	q += " ORDER BY o.created_at DESC"
 
 	rows, err := s.db.Query(q, args...)
 	if err != nil {
@@ -58,7 +58,7 @@ func (s *srv) handleExport(w http.ResponseWriter, r *http.Request) {
 
 	cw := csv.NewWriter(w)
 	defer cw.Flush()
-	cw.Write([]string{"ID", "Waktu dibuat", "Status", "Harga", "Kode", "Total", "Untuk apa", "Pemesan", "Dibayar pada", "Link"})
+	cw.Write([]string{"ID", "Waktu dibuat", "Status", "Harga", "Kode", "Total", "Untuk apa", "Pemesan", "Diminta oleh", "Dibayar pada", "Link"})
 
 	fmtTime := func(ts int64) string {
 		if ts == 0 {
@@ -68,9 +68,9 @@ func (s *srv) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for rows.Next() {
-		var id, st, label, buyer string
+		var id, st, label, buyer, app string
 		var price, code, total, createdAt, expiresAt, paidAt int64
-		if rows.Scan(&id, &price, &code, &total, &st, &label, &buyer, &createdAt, &expiresAt, &paidAt) != nil {
+		if rows.Scan(&id, &price, &code, &total, &st, &label, &buyer, &createdAt, &expiresAt, &paidAt, &app) != nil {
 			continue
 		}
 		cw.Write([]string{
@@ -82,6 +82,7 @@ func (s *srv) handleExport(w http.ResponseWriter, r *http.Request) {
 			strconv.FormatInt(total, 10),
 			label,
 			buyer,
+			app,
 			fmtTime(paidAt),
 			"/pay/" + id,
 		})

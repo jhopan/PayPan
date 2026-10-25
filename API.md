@@ -345,6 +345,13 @@ POST /api/invoice
 
 `label` dan `buyer` tersimpan di order, tampil di detail transaksi, laporan, dan ekspor CSV.
 
+### Diminta oleh
+
+Nama aplikasi pemilik token yang membuat invoice (`apps.name`) ikut disimpan
+(`orders.created_by`) dan ditampilkan sebagai **Diminta oleh** di detail
+transaksi, daftar Laporan, dan ekspor CSV. Order dari kasir (tanpa token)
+tampil sebagai `—`.
+
 ### Riwayat status
 
 Setiap perubahan status dicatat di tabel `order_events`: dari status apa, ke status apa, oleh siapa (`system` / nama admin), catatan, dan waktu. Ditampilkan di halaman detail transaksi.

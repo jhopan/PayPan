@@ -124,8 +124,8 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 
 	// daftar transaksi paid terbaru (bisa difilter per bulan) + sumber dari payments
 	filterMonth := r.URL.Query().Get("bulan")
-	listQ := `SELECT o.id, o.price, o.code, o.total, o.status, COALESCE((SELECT p.source FROM payments p WHERE p.amount=o.total ORDER BY p.received_at DESC LIMIT 1),''), o.paid_at, o.created_at
-	FROM orders o WHERE o.status='paid'`
+	listQ := `SELECT o.id, o.price, o.code, o.total, o.status, COALESCE((SELECT p.source FROM payments p WHERE p.amount=o.total ORDER BY p.received_at DESC LIMIT 1),''), o.paid_at, o.created_at, COALESCE(a.name,'')
+	FROM orders o LEFT JOIN apps a ON a.rowid=o.created_by WHERE o.status='paid'`
 	var listArgs []any
 	if filterMonth != "" && len(filterMonth) == 7 {
 		start, err := time.Parse("2006-01", filterMonth)
@@ -144,12 +144,13 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		Status     string
 		PaidAt     int64
 		CreatedAt  int64
+		App        string
 	}
 	var txs []txRow
 	if err == nil {
 		for txRows.Next() {
 			var t txRow
-			txRows.Scan(&t.ID, &t.Price, &t.Code, &t.Total, &t.Status, &t.Source, &t.PaidAt, &t.CreatedAt)
+			txRows.Scan(&t.ID, &t.Price, &t.Code, &t.Total, &t.Status, &t.Source, &t.PaidAt, &t.CreatedAt, &t.App)
 			txs = append(txs, t)
 		}
 		txRows.Close()
@@ -214,14 +215,15 @@ func (s *srv) handleAdminLaporan(w http.ResponseWriter, r *http.Request) {
 		})() + `" style="margin:0">
 <button class="sec">Filter</button>
 <a class="pg" href="/admin/laporan" style="margin-left:8px">Semua</a></form>
-<table><tr><th>Waktu</th><th>ID</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th>Aksi</th></tr>`)
+<table><tr><th>Waktu</th><th>ID</th><th>Diminta oleh</th><th>Status</th><th class="money">Harga</th><th class="money">Total</th><th>Aksi</th></tr>`)
 		if len(txs) == 0 {
-			b.WriteString(`<tr><td colspan="6" class="empty">Tidak ada transaksi lunas</td></tr>`)
+			b.WriteString(`<tr><td colspan="7" class="empty">Tidak ada transaksi lunas</td></tr>`)
 		}
 		for _, t := range txs {
 			created := time.Unix(t.CreatedAt, 0).Format("02 Jan 2006 15:04")
 			b.WriteString(`<tr><td><small>` + created + `</small></td>` +
 				`<td><code>` + t.ID + `</code></td>` +
+				`<td><small>` + escOrDash(t.App) + `</small></td>` +
 				`<td><span class="badge paid">paid</span></td>` +
 				`<td class="money">` + rp(t.Price) + `</td>` +
 				`<td class="money"><b>` + rp(t.Total) + `</b></td>` +
