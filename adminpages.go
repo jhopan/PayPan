@@ -67,11 +67,13 @@ func (s *srv) handleLogin(w http.ResponseWriter, r *http.Request) {
 				HttpOnly: true, SameSite: http.SameSiteLaxMode,
 			})
 			s.audit(s.adminUser(), "admin.login", "ip "+ip)
+			go s.notifyTG("🔑 Login admin berhasil · IP " + ip)
 			http.Redirect(w, r, "/admin", 302)
 			return
 		}
 		limiter.hit(ip)
 		s.audit("anon", "login.gagal", "ip "+ip)
+		go s.notifyTG("🚨 Login gagal · IP " + ip)
 		msg = "Username atau password salah"
 	}
 	tmpl, _ := template.New("l").Parse(loginHTML())

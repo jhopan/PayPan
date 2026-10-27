@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -116,6 +117,22 @@ func (s *srv) handleInvoiceCreate(w http.ResponseWriter, r *http.Request) {
 		"qr_url":  "/pay/" + oid + "/qr.png",
 		"qr":      qrData,
 	})
+	tgMsg := fmt.Sprintf("🧾 Invoice dibuat Rp%d", q.Price)
+	if q.Label != "" {
+		tgMsg += " · " + q.Label
+	}
+	if q.Buyer != "" {
+		tgMsg += " · " + q.Buyer
+	}
+	if q.Label == "" && q.Buyer == "" {
+		var appName string
+		s.db.QueryRow("SELECT name FROM apps WHERE rowid=?", appRowid).Scan(&appName)
+		if appName != "" {
+			tgMsg += " · via " + appName
+		}
+	}
+	tgMsg += fmt.Sprintf(" (kode %03d, exp %ds)", code, tuning.InvoiceExpirySec())
+	go s.notifyTG(tgMsg)
 }
 
 // GET /api/invoice/{id} — status + detail.

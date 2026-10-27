@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // logOrderEvent: catat perubahan status per order (riwayat transaksi).
 // actor: "system" (worker/notif), nama admin, atau "app:<nama>".
@@ -53,7 +56,21 @@ func (s *srv) setOrderStatus(orderID, from, to, actor, note string) bool {
 	return true
 }
 
-// expireOrder: dipakai worker — tandai expired + riwayat.
+// expireOrder: dipakai worker — tandai expired + riwayat + notif TG.
 func (s *srv) expireOrder(orderID string) {
-	s.setOrderStatus(orderID, "pending", "expired", "system", "lewat window bayar")
+	if !s.setOrderStatus(orderID, "pending", "expired", "system", "lewat window bayar") {
+		return
+	}
+	// notif singkat: label + nominal kalau ada, jangan spam panjang
+	var price int64
+	var label, buyer string
+	s.db.QueryRow("SELECT price,COALESCE(label,''),COALESCE(buyer,'') FROM orders WHERE id=?", orderID).Scan(&price, &label, &buyer)
+	msg := fmt.Sprintf("⏰ Invoice expired Rp%d", price)
+	if label != "" {
+		msg += " · " + label
+	}
+	if buyer != "" {
+		msg += " · " + buyer
+	}
+	go s.notifyTG(msg)
 }
