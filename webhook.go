@@ -19,7 +19,29 @@ import (
 // fireWebhooks dipanggil (goroutine) saat order jadi paid: dari match notif
 // maupun manual mark-paid. Fire-and-forget per URL aktif; result dicatat.
 func (s *srv) fireWebhooks(orderID string, total int64) {
-		rows, err := s.db.Query("SELECT rowid,url,secret FROM webhooks WHERE active=1")
+	// ambil created_by + label + buyer + app name dari order
+	var createdBy int64
+	var price, code int64
+	var paidAt sql.NullInt64
+	var label, buyer, appName string
+	s.db.QueryRow(`
+		SELECT o.created_by, o.price, o.code, o.paid_at,
+		       COALESCE(o.label,''), COALESCE(o.buyer,''), COALESCE(a.name,'')
+		FROM orders o
+		LEFT JOIN apps a ON a.rowid = o.created_by
+		WHERE o.id = ?`, orderID).Scan(&createdBy, &price, &code, &paidAt, &label, &buyer, &appName)
+
+	// hanya webhook milik app yang membuat invoice ini
+	// (created_by=0 = kasir/manual → kirim ke semua webhook aktif sebagai fallback)
+	var rows *sql.Rows
+	var err error
+	if createdBy > 0 {
+		rows, err = s.db.Query(
+			"SELECT rowid,url,secret FROM webhooks WHERE active=1 AND app_rowid=?", createdBy)
+	} else {
+		rows, err = s.db.Query(
+			"SELECT rowid,url,secret FROM webhooks WHERE active=1")
+	}
 	if err != nil {
 		return
 	}
@@ -40,13 +62,17 @@ func (s *srv) fireWebhooks(orderID string, total int64) {
 		return
 	}
 
-	var price, code int64
-	var paidAt sql.NullInt64
-	s.db.QueryRow("SELECT price,code,paid_at FROM orders WHERE id=?", orderID).Scan(&price, &code, &paidAt)
 	payload, _ := json.Marshal(map[string]any{
 		"event": "order.paid",
 		"order": map[string]any{
-			"id": orderID, "price": price, "code": code, "total": total, "paid_at": paidAt.Int64,
+			"id":         orderID,
+			"price":      price,
+			"code":       code,
+			"total":      total,
+			"paid_at":    paidAt.Int64,
+			"label":      label,
+			"buyer":      buyer,
+			"created_by": appName,
 		},
 	})
 
